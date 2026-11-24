@@ -1,0 +1,30 @@
+name = "fingist-api"
+main = "src/worker.ts"
+compatibility_date = "2025-11-01"
+
+# Runs every 2 minutes. Each source also has its own poll interval (see src/config/sources.ts),
+# so official/regulator feeds are checked less often than fast news feeds.
+[triggers]
+crons = ["*/2 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fingist"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# The Worker calls itself so each feed / AI batch runs as its own invocation
+# (keeps each one inside the free plan's per-invocation CPU limit).
+[[services]]
+binding = "SELF"
+service = "fingist-api"
+
+[vars]
+GEMINI_MODEL = "gemini-flash-lite-latest"
+MAX_AGE_HOURS = "48"
+ENRICH_BATCH_SIZE = "8"
+ENRICH_BATCHES_PER_TICK = "3"
+
+# Secrets (set with `npx wrangler secret put NAME`, never commit them):
+#   GEMINI_API_KEY  - Google AI Studio key
+#   INTERNAL_KEY    - any long random string; protects /internal/* routes

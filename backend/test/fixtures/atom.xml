@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hand-written test fixture (not real news). -->
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test Atom</title>
+  <entry>
+    <title type="html">Fed holds rates steady at 4.25%</title>
+    <link rel="self" href="https://example.org/api/1"/>
+    <link rel="alternate" href="https://example.org/news/fed-holds"/>
+    <updated>2026-11-23T19:00:00Z</updated>
+    <summary>The Federal Reserve kept its benchmark rate unchanged.</summary>
+    <id>urn:uuid:1</id>
+  </entry>
+</feed>

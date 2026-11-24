@@ -1,0 +1,167 @@
+import type { Enrichment, Story } from '../types';
+
+export interface SourceState {
+  source_id: string;
+  etag: string | null;
+  last_modified: string | null;
+  last_fetch_at: number;
+  last_ok_at: number;
+  last_error: string | null;
+  consecutive_failures: number;
+}
+
+export async function getSourceStates(db: D1Database): Promise<Map<string, SourceState>> {
+  const { results } = await db.prepare('SELECT * FROM source_state').all<SourceState>();
+  return new Map(results.map((r) => [r.source_id, r]));
+}
+
+export async function saveSourceState(
+  db: D1Database,
+  id: string,
+  now: number,
+  r: { ok: boolean; etag?: string; lastModified?: string; error?: string; newItems?: number },
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO source_state (source_id, etag, last_modified, last_fetch_at, last_ok_at, last_error, consecutive_failures, last_new_items)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+       ON CONFLICT(source_id) DO UPDATE SET
+         etag = COALESCE(?2, etag),
+         last_modified = COALESCE(?3, last_modified),
+         last_fetch_at = ?4,
+         last_ok_at = CASE WHEN ?7 = 0 THEN ?4 ELSE last_ok_at END,
+         last_error = ?6,
+         consecutive_failures = CASE WHEN ?7 = 0 THEN 0 ELSE consecutive_failures + 1 END,
+         last_new_items = ?8`,
+    )
+    .bind(id, r.etag ?? null, r.lastModified ?? null, now, r.ok ? now : 0, r.error ?? null, r.ok ? 0 : 1, r.newItems ?? 0)
+    .run();
+}
+
+/** Returns the subset of ids already stored. */
+export async function existingIds(db: D1Database, ids: string[]): Promise<Set<string>> {
+  const found = new Set<string>();
+  for (let i = 0; i < ids.length; i += 90) {
+    const chunk = ids.slice(i, i + 90);
+    const { results } = await db
+      .prepare(`SELECT id FROM stories WHERE id IN (${chunk.map(() => '?').join(',')})`)
+      .bind(...chunk)
+      .all<{ id: string }>();
+    for (const r of results) found.add(r.id);
+  }
+  return found;
+}
+
+export async function recentTitles(db: D1Database, since: number): Promise<string[]> {
+  const { results } = await db
+    .prepare('SELECT title FROM stories WHERE published_at > ?1 ORDER BY published_at DESC LIMIT 1500')
+    .bind(since)
+    .all<{ title: string }>();
+  return results.map((r) => r.title);
+}
+
+export async function insertStories(db: D1Database, stories: Story[]): Promise<void> {
+  if (!stories.length) return;
+  const stmt = db.prepare(
+    `INSERT OR IGNORE INTO stories (id, source_id, source_name, url, title, snippet, region, kind, published_at, fetched_at, status)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'pending')`,
+  );
+  await db.batch(
+    stories.map((s) => stmt.bind(s.id, s.sourceId, s.sourceName, s.url, s.title, s.snippet, s.region, s.kind, s.publishedAt, s.fetchedAt)),
+  );
+}
+
+interface StoryRow {
+  id: string; source_id: string; source_name: string; url: string; title: string; snippet: string;
+  region: Story['region']; kind: Story['kind']; published_at: number; fetched_at: number; attempts: number;
+}
+
+/** Atomically leases up to `limit` stories for AI enrichment (newest first). */
+export async function leasePending(db: D1Database, now: number, limit: number, leaseMs = 120_000): Promise<{ story: Story; attempts: number }[]> {
+  const { results } = await db
+    .prepare(
+      `UPDATE stories SET status = 'processing', lease_until = ?1, attempts = attempts + 1
+       WHERE id IN (
+         SELECT id FROM stories
+         WHERE status = 'pending' OR (status = 'processing' AND lease_until < ?2)
+         ORDER BY published_at DESC LIMIT ?3)
+       RETURNING id, source_id, source_name, url, title, snippet, region, kind, published_at, fetched_at, attempts`,
+    )
+    .bind(now + leaseMs, now, limit)
+    .all<StoryRow>();
+  return results.map((r) => ({
+    attempts: r.attempts,
+    story: {
+      id: r.id, sourceId: r.source_id, sourceName: r.source_name, url: r.url, title: r.title, snippet: r.snippet,
+      region: r.region, kind: r.kind, publishedAt: r.published_at, fetchedAt: r.fetched_at,
+    },
+  }));
+}
+
+export async function saveEnrichment(db: D1Database, id: string, e: Enrichment, now: number): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE stories SET status = ?2, summary = ?3, category = ?4, sentiment = ?5, relevance = ?6, region_impact = ?7,
+         companies = ?8, flags = ?9, enriched_at = ?10, error = NULL WHERE id = ?1`,
+    )
+    .bind(
+      id, e.marketRelevant ? 'ready' : 'rejected', e.summary, e.category, e.sentiment, e.relevance, e.regionImpact,
+      JSON.stringify(e.companies), JSON.stringify(e.flags), now,
+    )
+    .run();
+}
+
+/** After too many failed attempts the story stays visible as headline-only. */
+export async function markFailed(db: D1Database, id: string, error: string, attempts: number, maxAttempts = 3): Promise<void> {
+  await db
+    .prepare(`UPDATE stories SET status = ?2, error = ?3, lease_until = 0 WHERE id = ?1`)
+    .bind(id, attempts >= maxAttempts ? 'failed' : 'pending', error.slice(0, 500))
+    .run();
+}
+
+/** Puts leased stories back without counting the attempt (e.g. AI rate limit). */
+export async function releaseLease(db: D1Database, ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  await db
+    .prepare(`UPDATE stories SET status = 'pending', lease_until = 0, attempts = MAX(attempts - 1, 0) WHERE id IN (${ids.map(() => '?').join(',')})`)
+    .bind(...ids)
+    .run();
+}
+
+export interface FeedQuery {
+  region?: 'india' | 'global';
+  category?: string;
+  before?: number;
+  limit: number;
+}
+
+export async function queryFeed(db: D1Database, q: FeedQuery) {
+  const where = [`status IN ('ready', 'pending', 'processing', 'failed')`, `COALESCE(relevance, 'medium') != 'low'`];
+  const binds: (string | number)[] = [];
+  if (q.before) { binds.push(q.before); where.push(`published_at < ?${binds.length}`); }
+  if (q.region) { binds.push(q.region); where.push(`(region = ?${binds.length} OR region_impact = ?${binds.length} OR region_impact = 'both')`); }
+  if (q.category) { binds.push(q.category); where.push(`category = ?${binds.length}`); }
+  binds.push(q.limit);
+  const { results } = await db
+    .prepare(
+      `SELECT id, source_name, url, title, summary, category, sentiment, relevance, region, region_impact, kind, companies, published_at, status
+       FROM stories WHERE ${where.join(' AND ')} ORDER BY published_at DESC LIMIT ?${binds.length}`,
+    )
+    .bind(...binds)
+    .all<Record<string, unknown>>();
+  return results.map((r) => ({
+    id: r.id,
+    title: r.title,
+    summary: r.summary ?? null,
+    summaryStatus: r.status === 'ready' ? (r.summary ? 'ready' : 'unavailable') : r.status === 'failed' ? 'unavailable' : 'pending',
+    source: r.source_name,
+    url: r.url,
+    category: r.category ?? null,
+    sentiment: r.sentiment ?? null,
+    relevance: r.relevance ?? null,
+    region: r.region_impact ?? r.region,
+    kind: r.kind,
+    companies: r.companies ? JSON.parse(r.companies as string) : [],
+    publishedAt: r.published_at,
+  }));
+}

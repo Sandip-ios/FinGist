@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-written test fixture (not real news). -->
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<channel>
+  <title>Test Markets</title>
+  <link>https://example.com/markets</link>
+  <item>
+    <title><![CDATA[Sensex jumps 500 points as banks rally; Nifty ends above 24,000]]></title>
+    <link>https://example.com/markets/sensex-jumps?utm_source=rss&amp;utm_medium=feed&amp;id=42</link>
+    <description><![CDATA[<p>Benchmark indices closed higher on Monday, led by <b>HDFC Bank</b> &amp; ICICI Bank.</p><img src="x.jpg"/>]]></description>
+    <pubDate>Mon, 23 Nov 2026 10:30:00 +0530</pubDate>
+    <guid isPermaLink="false">abc-1</guid>
+  </item>
+  <item>
+    <title>Infosys Q2 profit rises 6.5% to ₹7,364 crore</title>
+    <link>https://example.com/infosys-q2</link>
+    <description>Infosys&#8217;s net profit rose 6.5% year-on-year.</description>
+    <dc:date>2026-11-23T08:00:00Z</dc:date>
+  </item>
+  <item>
+    <title>No link here</title>
+  </item>
+</channel>
+</rss>
