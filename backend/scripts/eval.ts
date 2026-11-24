@@ -21,8 +21,8 @@ const flag = (n: string) => args.includes(`--${n}`);
 const opt = (n: string, d: string) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1]! : d; };
 
 const LIMIT = Number(opt('limit', '100'));
-const MODEL = opt('model', process.env.GEMINI_MODEL ?? 'gemini-flash-lite-latest');
-const FALLBACK = opt('fallback', 'gemini-flash-latest');
+const MODEL = opt('model', process.env.GEMINI_MODEL ?? 'gemini-3.5-flash-lite');
+const FALLBACK = opt('fallback', 'gemini-2.5-flash');
 const BATCH = Number(opt('batch', '8'));
 const GAP_MS = Number(opt('gap-ms', '4500')); // stay under free-tier requests/minute
 const NO_AI = flag('no-ai');

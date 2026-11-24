@@ -14,6 +14,7 @@ export interface Env {
   GEMINI_API_KEY: string;
   INTERNAL_KEY: string;
   GEMINI_MODEL: string;
+  GEMINI_FALLBACK_MODEL?: string;
   MAX_AGE_HOURS: string;
   ENRICH_BATCH_SIZE: string;
   ENRICH_BATCHES_PER_TICK: string;
@@ -122,7 +123,15 @@ async function enrichOnce(env: Env) {
   if (!leased.length) return { enriched: 0 };
   const attempts = new Map(leased.map((l) => [l.story.id, l.attempts]));
   try {
-    const out = await enrichBatch({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL }, leased.map((l) => l.story));
+    const stories = leased.map((l) => l.story);
+    let out;
+    try {
+      out = await enrichBatch({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL }, stories);
+    } catch (e) {
+      // Main model overloaded: try the fallback model once before giving up for this tick.
+      if (!(e instanceof TransientError) || !env.GEMINI_FALLBACK_MODEL) throw e;
+      out = await enrichBatch({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_FALLBACK_MODEL }, stories);
+    }
     let ok = 0;
     for (const o of out) {
       if (o.enrichment) { await saveEnrichment(env.DB, o.story.id, o.enrichment, now); ok++; }

@@ -7,8 +7,11 @@ For EACH story you receive (headline + short feed description), return:
   * Use ONLY facts in the headline/description. Never invent numbers, dates, names, reasons or quotes.
   * Every number you write must appear in the input. Keep units and currency as given (₹, crore, $, bn, %).
   * Neutral, factual tone. No opinions, no predictions, no hype, no clickbait.
+  * Never pad. Do not add generic filler such as "this reflects the company's performance",
+    "provides insights into", "investors will watch closely" or "this is significant for the market".
+    Instead, add useful context that IS in the input (who, what changed, by how much, why).
   * NEVER give investment advice: no buy/sell/hold, no target prices, no "investors should".
-  * If the input is too thin to write 30 words without guessing, set insufficient_info=true and write the best factual summary you can (it may be shorter).
+  * If the input is too thin to write 30 words without guessing or padding, set insufficient_info=true and write a shorter factual summary (15-30 words).
 - category: one of ${CATEGORIES.join(', ')}.
 - sentiment: likely tone of the news for the companies/market involved: ${SENTIMENTS.join(', ')}. Use neutral when unclear.
 - relevance: how much this matters to stock-market investors: ${RELEVANCE.join(', ')}.

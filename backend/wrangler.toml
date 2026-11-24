@@ -20,7 +20,8 @@ binding = "SELF"
 service = "fingist-api"
 
 [vars]
-GEMINI_MODEL = "gemini-flash-lite-latest"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
+GEMINI_FALLBACK_MODEL = "gemini-2.5-flash"
 MAX_AGE_HOURS = "48"
 ENRICH_BATCH_SIZE = "8"
 ENRICH_BATCHES_PER_TICK = "3"

@@ -5,6 +5,8 @@ import {
 } from '../types';
 
 export const MIN_WORDS = 25;
+/** Shortest summary kept when the model says the source was thin. */
+export const MIN_WORDS_THIN = 15;
 export const MAX_WORDS = 60;
 
 export function wordCount(s: string): number {
@@ -47,7 +49,7 @@ export function validateEnrichment(story: Story, raw: Record<string, unknown>): 
     if (unverified.length) flags.push(`unverified_number:${unverified.join(',')}`);
     if (ADVICE.test(summary)) flags.push('advice_language');
 
-    const reject = unverified.length > 0 || words > MAX_WORDS || flags.includes('advice_language') || words < 12;
+    const reject = unverified.length > 0 || words > MAX_WORDS || flags.includes('advice_language') || words < MIN_WORDS_THIN;
     if (reject) summary = '';
   } else {
     flags.push('empty_summary');
