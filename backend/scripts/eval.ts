@@ -4,13 +4,14 @@
  *   GEMINI_API_KEY=... npm run eval            # 100 stories with AI summaries
  *   npm run eval -- --no-ai                    # feeds only (which sources work, dedupe, freshness)
  *   npm run eval -- --limit 40 --model gemini-flash-latest
+ *   npm run eval -- --api openai              # send the key as a Bearer token instead
  *
  * Output: eval-output/report.html and eval-output/report.json
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { SOURCES } from '../src/config/sources';
 import { enrichBatch, type EnrichOutcome } from '../src/enrich/enrich';
-import { RateLimitError } from '../src/enrich/gemini';
+import { RateLimitError, TransientError } from '../src/enrich/gemini';
 import { dedupeList } from '../src/ingest/dedupe';
 import { collectSource } from '../src/pipeline';
 import type { Story } from '../src/types';
@@ -21,9 +22,11 @@ const opt = (n: string, d: string) => { const i = args.indexOf(`--${n}`); return
 
 const LIMIT = Number(opt('limit', '100'));
 const MODEL = opt('model', process.env.GEMINI_MODEL ?? 'gemini-flash-lite-latest');
+const FALLBACK = opt('fallback', 'gemini-flash-latest');
 const BATCH = Number(opt('batch', '8'));
 const GAP_MS = Number(opt('gap-ms', '4500')); // stay under free-tier requests/minute
 const NO_AI = flag('no-ai');
+const API = (opt('api', process.env.GEMINI_API_MODE ?? 'native') === 'openai' ? 'openai' : 'native') as 'native' | 'openai';
 const MAX_AGE_H = Number(opt('max-age', '48'));
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -34,7 +37,7 @@ async function main() {
   const sourceRows: Record<string, unknown>[] = [];
   const all: Story[] = [];
   const enabled = SOURCES.filter((s) => s.enabled);
-  const results = await Promise.all(enabled.map(async (s) => ({ s, t0: Date.now(), r: await collectSource(s, now, MAX_AGE_H) })));
+  const results = await Promise.all(enabled.map(async (s) => ({ s, r: await collectSource(s, now, MAX_AGE_H) })));
   for (const { s, r } of results) {
     sourceRows.push({ id: s.id, name: s.name, status: r.fetch.status, http: r.fetch.httpStatus, error: r.fetch.error, parsed: r.parsed, kept: r.stories.length, stale: r.stale, routine: r.routine });
     console.log(`  ${r.fetch.status === 'ok' ? '✓' : '✗'} ${s.id.padEnd(20)} parsed=${r.parsed} kept=${r.stories.length} stale=${r.stale} routine=${r.routine} ${r.fetch.error ?? ''}`);
@@ -60,16 +63,24 @@ async function main() {
     for (let i = 0; i < sample.length; i += BATCH) {
       const batch = sample.slice(i, i + BATCH);
       for (let attempt = 0; ; attempt++) {
+        // After two overloaded/timeout errors, try the fallback model.
+        const model = attempt >= 2 && attempt % 2 === 0 ? FALLBACK : MODEL;
         try {
           const t0 = Date.now();
-          const res = await enrichBatch({ apiKey, model: MODEL }, batch);
+          const res = await enrichBatch({ apiKey, model, api: API }, batch);
           outcomes.push(...res);
-          console.log(`  AI batch ${i / BATCH + 1}/${Math.ceil(sample.length / BATCH)} ok in ${Date.now() - t0} ms`);
+          console.log(`  AI batch ${i / BATCH + 1}/${Math.ceil(sample.length / BATCH)} ok in ${Date.now() - t0} ms (${model})`);
           break;
         } catch (e) {
-          if (e instanceof RateLimitError && attempt < 3) { console.log('  rate limited, waiting 30s'); await sleep(30_000); continue; }
-          console.log(`  AI batch failed: ${(e as Error).message}`);
-          outcomes.push(...batch.map((story) => ({ story, error: (e as Error).message })));
+          const retryable = e instanceof RateLimitError || e instanceof TransientError;
+          if (retryable && attempt < 5) {
+            const wait = Math.min(60_000, 10_000 * 2 ** attempt);
+            console.log(`  ${e instanceof RateLimitError ? 'rate limited' : 'Gemini busy'} (${model}), retrying in ${wait / 1000}s`);
+            await sleep(wait);
+            continue;
+          }
+          console.log(`  AI batch failed: ${(e as Error).message.slice(0, 160)}`);
+          outcomes.push(...batch.map((story) => ({ story, error: (e as Error).message.slice(0, 200) })));
           break;
         }
       }

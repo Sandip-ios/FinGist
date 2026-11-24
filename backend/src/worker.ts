@@ -1,6 +1,6 @@
 import { SOURCES } from './config/sources';
 import { enrichBatch } from './enrich/enrich';
-import { RateLimitError } from './enrich/gemini';
+import { RateLimitError, TransientError } from './enrich/gemini';
 import { dedupeList, titleTokens } from './ingest/dedupe';
 import { collectSource } from './pipeline';
 import {
@@ -130,8 +130,8 @@ async function enrichOnce(env: Env) {
     }
     return { enriched: ok, failed: out.length - ok };
   } catch (e) {
-    // On rate limit, release without counting it as a failed attempt.
-    if (e instanceof RateLimitError) await releaseLease(env.DB, leased.map((l) => l.story.id));
+    // On rate limit / overload, release without counting it as a failed attempt.
+    if (e instanceof RateLimitError || e instanceof TransientError) await releaseLease(env.DB, leased.map((l) => l.story.id));
     else for (const l of leased) await markFailed(env.DB, l.story.id, String((e as Error).message), l.attempts);
     return { enriched: 0, error: String((e as Error).message) };
   }
