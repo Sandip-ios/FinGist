@@ -10,7 +10,7 @@ crons = ["*/2 * * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "fingist"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "404ec4e9-908e-4e81-be5b-b22a9e80969d"
 migrations_dir = "migrations"
 
 # The Worker calls itself so each feed / AI batch runs as its own invocation
