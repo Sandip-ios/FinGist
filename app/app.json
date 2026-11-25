@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "FinGist",
+    "slug": "fingist",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "fingist",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#01208e",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.sandippatel.fingist",
+      "config": { "usesNonExemptEncryption": false }
+    },
+    "android": {
+      "package": "com.sandippatel.fingist",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#01208e"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#01208e"
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "https://fingist-api.fingist-sandip.workers.dev"
+    }
+  }
+}
