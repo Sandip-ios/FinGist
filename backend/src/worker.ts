@@ -10,7 +10,7 @@ import { CATEGORIES } from './types';
 
 export interface Env {
   DB: D1Database;
-  SELF: Fetcher;
+  SELF?: Fetcher;
   GEMINI_API_KEY: string;
   INTERNAL_KEY: string;
   GEMINI_MODEL: string;
@@ -30,18 +30,29 @@ export default {
   /** Cron: fan out one invocation per due feed, plus a few AI batches. */
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const now = Date.now();
+    if (!env.INTERNAL_KEY) console.error('INTERNAL_KEY secret is not set: internal jobs will be rejected');
+    if (!env.GEMINI_API_KEY) console.error('GEMINI_API_KEY secret is not set: no AI summaries');
     const states = await getSourceStates(env.DB);
-    const internal = { headers: { 'x-internal-key': env.INTERNAL_KEY } };
-    for (const s of SOURCES) {
-      if (!s.enabled) continue;
+    const due = SOURCES.filter((s) => {
+      if (!s.enabled) return false;
       const st = states.get(s.id);
       // Back off failing feeds: wait longer after each consecutive failure (max 1h).
       const backoff = Math.min(60, s.pollMinutes * 2 ** Math.min(st?.consecutive_failures ?? 0, 5));
-      if (st && now - st.last_fetch_at < backoff * 60_000 - 15_000) continue;
-      ctx.waitUntil(env.SELF.fetch(`https://internal/internal/ingest/${s.id}`, internal));
-    }
+      return !st || now - st.last_fetch_at >= backoff * 60_000 - 15_000;
+    });
     const batches = Number(env.ENRICH_BATCHES_PER_TICK) || 3;
-    for (let i = 0; i < batches; i++) ctx.waitUntil(env.SELF.fetch('https://internal/internal/enrich', internal));
+    const jobs = [
+      ...due.map((s) => `/internal/ingest/${s.id}`),
+      ...Array.from({ length: batches }, () => '/internal/enrich'),
+    ];
+    console.log(`cron: ${due.length} feeds due, ${batches} AI batches`);
+    ctx.waitUntil(
+      Promise.allSettled(jobs.map((path) => runJob(env, path))).then((results) => {
+        const failed = results.filter((r) => r.status === 'rejected');
+        console.log(`cron: ${results.length - failed.length}/${results.length} jobs ok`);
+        for (const f of failed) console.error('cron job failed:', String((f as PromiseRejectedResult).reason));
+      }),
+    );
   },
 
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -89,6 +100,25 @@ export default {
     return json({ error: 'not found' }, 404);
   },
 } satisfies ExportedHandler<Env>;
+
+/**
+ * Runs an internal job as its own invocation through the SELF binding (separate CPU budget).
+ * If the binding is missing or fails, runs the job inline so news still flows.
+ */
+async function runJob(env: Env, path: string): Promise<void> {
+  if (env.SELF) {
+    try {
+      const res = await env.SELF.fetch(`https://internal${path}`, { headers: { 'x-internal-key': env.INTERNAL_KEY ?? '' } });
+      const body = await res.text();
+      if (res.ok) { console.log(path, body.slice(0, 200)); return; }
+      console.error(`${path} via SELF -> HTTP ${res.status} ${body.slice(0, 200)}; running inline`);
+    } catch (e) {
+      console.error(`${path} via SELF failed: ${(e as Error).message}; running inline`);
+    }
+  }
+  const result = path === '/internal/enrich' ? await enrichOnce(env) : await ingestOne(env, path.slice('/internal/ingest/'.length));
+  console.log(path, '(inline)', JSON.stringify(result).slice(0, 200));
+}
 
 async function ingestOne(env: Env, sourceId: string) {
   const source = SOURCES.find((s) => s.id === sourceId && s.enabled);
