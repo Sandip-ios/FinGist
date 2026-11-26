@@ -29,7 +29,7 @@ export function StoryViewer({ stories, start, title, onClose }: { stories: Story
               data={stories}
               keyExtractor={(x: Story) => x.id}
               renderItem={({ item, index }: { item: Story; index: number }) => (
-                <StackedCard index={index} height={h} scrollY={scrollY}>
+                <StackedCard index={index} height={h} scrollY={scrollY} last={index === stories.length - 1}>
                   <NewsCard story={item} />
                 </StackedCard>
               )}

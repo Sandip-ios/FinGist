@@ -31,9 +31,12 @@ export function FeedScreen() {
   return (
     <View style={[s.root, { backgroundColor: t.bg, paddingTop: insets.top }]}>
       <View style={s.header}>
-        <Text style={[s.logo, { color: t.isDark ? '#fff' : BRAND.navy }]}>
-          Fin<Text style={{ color: t.isDark ? BRAND.lime : '#5fa80f' }}>Gist</Text>
-        </Text>
+        <View>
+          <Text style={[s.logo, { color: t.isDark ? '#fff' : BRAND.navy }]}>
+            Fin<Text style={{ color: t.isDark ? BRAND.lime : '#5fa80f' }}>Gist</Text>
+          </Text>
+          <Text style={[s.date, { color: t.textMuted }]}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</Text>
+        </View>
         <View style={s.headerIcons}>
           <Pressable onPress={() => setSearchOpen(true)} hitSlop={10} accessibilityLabel="Search news">
             <Ionicons name="search" size={24} color={t.text} />
@@ -75,8 +78,9 @@ export function FeedScreen() {
 
 const s = StyleSheet.create({
   root: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8 },
-  logo: { fontSize: 28, fontWeight: '900', fontStyle: 'italic', letterSpacing: -0.5 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4 },
+  date: { fontSize: 12, fontWeight: '600', marginTop: -2 },
+  logo: { fontSize: 27, fontWeight: '900', fontStyle: 'italic', letterSpacing: -0.5 },
   headerIcons: { flexDirection: 'row', alignItems: 'center', gap: 18 },
   badge: { position: 'absolute', top: -6, right: -9, minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
   badgeText: { fontSize: 10, fontWeight: '800' },

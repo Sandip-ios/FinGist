@@ -9,10 +9,11 @@ export const BRAND = {
 };
 
 const light = {
-  bg: '#eef1f7',
+  bg: '#eef2f8',
   card: '#ffffff',
-  text: '#0f172a',
-  textMuted: '#55627a',
+  text: '#0b1530',
+  textBody: '#334155',
+  textMuted: '#64748b',
   border: '#e2e8f0',
   chip: '#eef2ff',
   chipText: '#1e3a8a',
@@ -28,6 +29,7 @@ const dark: typeof light = {
   bg: '#060b18',
   card: '#101827',
   text: '#f1f5f9',
+  textBody: '#cbd5e1',
   textMuted: '#94a3b8',
   border: '#1f2a3d',
   chip: '#1b2744',
@@ -70,12 +72,20 @@ export function categoryMeta(id: string | null) {
   return CATEGORIES.find((c) => c.id === id) ?? { id: 'news', label: 'News', icon: 'newspaper' as IconName, colors: ['#1e3a8a', '#01208e'] as [string, string] };
 }
 
-export const SENTIMENT: Record<Sentiment, { label: string; icon: IconName; color: string }> = {
-  positive: { label: 'Positive', icon: 'arrow-up-circle', color: '#16a34a' },
-  negative: { label: 'Negative', icon: 'arrow-down-circle', color: '#dc2626' },
-  neutral: { label: 'Neutral', icon: 'remove-circle', color: '#64748b' },
-  mixed: { label: 'Mixed', icon: 'swap-vertical', color: '#d97706' },
+export const SENTIMENT: Record<Sentiment, { label: string; icon: IconName; color: string; bg: string; bgDark: string }> = {
+  positive: { label: 'Positive', icon: 'trending-up', color: '#15803d', bg: '#dcfce7', bgDark: 'rgba(34,197,94,0.16)' },
+  negative: { label: 'Negative', icon: 'trending-down', color: '#b91c1c', bg: '#fee2e2', bgDark: 'rgba(239,68,68,0.16)' },
+  neutral: { label: 'Neutral', icon: 'remove', color: '#475569', bg: '#eef2f6', bgDark: 'rgba(148,163,184,0.16)' },
+  mixed: { label: 'Mixed', icon: 'swap-vertical', color: '#b45309', bg: '#fef3c7', bgDark: 'rgba(245,158,11,0.16)' },
 };
+
+/** A stable colour per news source, used for its small initial badge. */
+export function sourceColor(name: string): string {
+  const palette = ['#1d4ed8', '#0f766e', '#7c3aed', '#be123c', '#c2410c', '#0369a1', '#4d7c0f', '#a21caf'];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return palette[h % palette.length]!;
+}
 
 export const RELEVANCE: Record<Relevance, { label: string; dots: number }> = {
   high: { label: 'High relevance', dots: 3 },

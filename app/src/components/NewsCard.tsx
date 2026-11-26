@@ -3,30 +3,31 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
-import { memo, useEffect, useRef } from 'react';
+import { memo, useRef } from 'react';
 import { Animated, Pressable, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useBookmarks } from '../lib/bookmarks';
 import { timeAgo } from '../lib/time';
 import type { Story } from '../lib/types';
-import { BRAND, categoryMeta, RELEVANCE, SENTIMENT, useTheme, type Theme } from '../theme';
+import { BRAND, categoryMeta, RELEVANCE, SENTIMENT, sourceColor, useTheme, type Theme } from '../theme';
 
 interface Props {
   story: Story;
-  /** Category pill on the photo; only needed in "Top stories" (category tabs already show it). */
+  /** Category label on the photo; only needed in "Top stories" (category tabs already show it). */
   showCategory?: boolean;
 }
 
 function NewsCardImpl({ story, showCategory = true }: Props) {
+  const t = useTheme();
+  const s = styles(t);
   const bookmarks = useBookmarks();
   const saved = bookmarks.isSaved(story.id);
-  const t = useTheme();
   const cat = categoryMeta(story.category);
   const sentiment = story.sentiment ? SENTIMENT[story.sentiment] : null;
   const relevance = story.relevance ? RELEVANCE[story.relevance] : null;
-  const s = styles(t);
   const { height: screenH } = useWindowDimensions();
-  // Photo banner scales with the screen so the text always fits on smaller phones.
-  const photoH = Math.round(Math.min(200, Math.max(130, screenH * 0.21)));
+  // Photo scales with the screen so the text still fits on small phones.
+  const photoH = Math.round(Math.min(250, Math.max(150, screenH * 0.27)));
+  const bookmarkScale = useRef(new Animated.Value(1)).current;
 
   const openArticle = async () => {
     Haptics.selectionAsync().catch(() => {});
@@ -42,12 +43,22 @@ function NewsCardImpl({ story, showCategory = true }: Props) {
     Share.share({ message: `${text}\n\nRead more: ${story.url}\n\nvia FinGist` }).catch(() => {});
   };
 
-  const regionLabel = story.region === 'india' ? '🇮🇳 India' : story.region === 'global' ? '🌐 Global' : '🇮🇳🌐 India & Global';
+  const toggleBookmark = () => {
+    Animated.sequence([
+      Animated.spring(bookmarkScale, { toValue: 1.25, useNativeDriver: true, speed: 40, bounciness: 12 }),
+      Animated.spring(bookmarkScale, { toValue: 1, useNativeDriver: true, speed: 30 }),
+    ]).start();
+    bookmarks.toggle(story);
+  };
+
+  const regionLabel = story.region === 'india' ? '🇮🇳 India' : story.region === 'global' ? '🌐 Global' : '🇮🇳 India · 🌐 Global';
+  const official = story.kind === 'regulator' || story.kind === 'filing';
 
   return (
-    <View style={s.page}>
+    <View style={[s.page, { backgroundColor: t.bg }]}>
       <View style={s.card}>
-        <View style={[s.banner, story.image && { height: photoH }]}>
+        {/* Photo (or category colours) with labels on top */}
+        <View style={[s.banner, { height: story.image ? photoH : 140 }]}>
           {story.image ? (
             <>
               <Image
@@ -58,7 +69,7 @@ function NewsCardImpl({ story, showCategory = true }: Props) {
                 cachePolicy="memory-disk"
                 accessible={false}
               />
-              <LinearGradient colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.75)']} locations={[0, 0.35, 1]} style={StyleSheet.absoluteFill} />
+              <LinearGradient colors={['rgba(0,0,0,0.30)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.70)']} locations={[0, 0.4, 1]} style={StyleSheet.absoluteFill} />
             </>
           ) : (
             <LinearGradient colors={cat.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill}>
@@ -67,114 +78,86 @@ function NewsCardImpl({ story, showCategory = true }: Props) {
           )}
           <View style={s.bannerTop}>
             {showCategory ? (
-              <View style={[s.catPill, story.image && { backgroundColor: cat.colors[0] }]}>
-                <Ionicons name={cat.icon} size={14} color="#fff" />
-                <Text style={s.catText}>{cat.label}</Text>
+              <View style={s.glass}>
+                <Ionicons name={cat.icon} size={13} color="#fff" />
+                <Text style={s.glassText}>{cat.label}</Text>
               </View>
             ) : (
               <View />
             )}
-            <Text style={[s.region, story.image && s.regionPhoto]}>{regionLabel}</Text>
+            <View style={s.glass}>
+              <Text style={s.glassText}>{regionLabel}</Text>
+            </View>
           </View>
           <View style={s.bannerBottom}>
-            <Text style={s.source} numberOfLines={1}>
-              {story.kind === 'regulator' || story.kind === 'filing' ? '🏛 ' : ''}
-              {story.source}
-            </Text>
+            <View style={[s.avatar, { backgroundColor: sourceColor(story.source) }]}>
+              {official ? <Ionicons name="business" size={12} color="#fff" /> : <Text style={s.avatarText}>{story.source.charAt(0)}</Text>}
+            </View>
+            <Text style={s.source} numberOfLines={1}>{story.source}</Text>
+            <Text style={s.dot}>•</Text>
             <Text style={s.time}>{timeAgo(story.publishedAt)}</Text>
           </View>
         </View>
+
+        {/* Headline, summary and labels */}
         <View style={s.body}>
-          <Text style={s.title} accessibilityRole="header" numberOfLines={5}>
-            {story.title}
-          </Text>
-
-          {story.summaryStatus === 'ready' && story.summary ? (
+          <Text style={s.title} accessibilityRole="header" numberOfLines={5}>{story.title}</Text>
+          {story.summary ? (
             <Text style={s.summary}>{story.summary}</Text>
-          ) : story.summaryStatus === 'pending' ? (
-            <PendingSummary t={t} />
           ) : (
-            <Text style={s.noSummary}>Summary not available for this story. Tap “Read more” for the full article.</Text>
+            <Text style={s.noSummary}>Summary not available for this story. Tap “Read full story” for the article.</Text>
           )}
-
-        </View>
-
-        <View style={s.meta}>
-          <View style={s.chips}>
-            {story.companies.map((c) => (
-              <View key={c.name} style={s.chip}>
-                <Text style={s.chipText} numberOfLines={1}>{c.symbol ? `${c.symbol}` : c.name}</Text>
-                {c.symbol && c.exchange ? <Text style={s.chipEx}>{c.exchange}</Text> : null}
-              </View>
-            ))}
+          <View style={s.pills}>
             {sentiment && (
-              <View style={[s.badge, { borderColor: sentiment.color }]}>
-                <Ionicons name={sentiment.icon} size={14} color={sentiment.color} />
-                <Text style={[s.badgeText, { color: sentiment.color }]}>{sentiment.label}</Text>
+              <View style={[s.pill, { backgroundColor: t.isDark ? sentiment.bgDark : sentiment.bg }]}>
+                <Ionicons name={sentiment.icon} size={13} color={sentiment.color} />
+                <Text style={[s.pillText, { color: t.isDark ? '#e2e8f0' : sentiment.color }]}>{sentiment.label}</Text>
               </View>
             )}
             {relevance && (
-              <View style={[s.badge, { borderColor: t.border }]}>
+              <View style={[s.pill, { backgroundColor: t.tabIdle }]}>
                 <View style={s.dots}>
                   {[1, 2, 3].map((d) => (
-                    <View key={d} style={[s.dot, { backgroundColor: d <= relevance.dots ? BRAND.lime : t.border }]} />
+                    <View key={d} style={[s.dotBar, { height: 4 + d * 3, backgroundColor: d <= relevance.dots ? (t.isDark ? BRAND.lime : BRAND.navy) : t.border }]} />
                   ))}
                 </View>
-                <Text style={[s.badgeText, { color: t.textMuted }]}>{relevance.label}</Text>
+                <Text style={[s.pillText, { color: t.textMuted }]}>{relevance.label}</Text>
               </View>
             )}
+            {story.companies.map((c) => (
+              <View key={c.name} style={[s.pill, s.ticker]}>
+                <Text style={s.tickerText} numberOfLines={1}>{c.symbol ?? c.name}</Text>
+                {c.symbol && c.exchange ? <Text style={s.tickerEx}>{c.exchange}</Text> : null}
+              </View>
+            ))}
           </View>
         </View>
 
+        {/* Actions */}
         <View style={s.footer}>
-          <Pressable onPress={openArticle} style={({ pressed }) => [s.readMore, pressed && { opacity: 0.85 }]} accessibilityRole="link" accessibilityLabel={`Read full story at ${story.source}`}>
-            <Text style={s.readMoreText} numberOfLines={1}>
-              Read full story
-            </Text>
-            <Ionicons name="open-outline" size={16} color="#fff" />
+          <Pressable onPress={openArticle} style={({ pressed }) => [s.readMore, pressed && { transform: [{ scale: 0.98 }], opacity: 0.92 }]} accessibilityRole="link" accessibilityLabel={`Read full story at ${story.source}`}>
+            <Text style={s.readMoreText} numberOfLines={1}>Read full story</Text>
+            <Ionicons name="arrow-forward" size={18} color="#fff" />
           </Pressable>
-          <Pressable onPress={() => bookmarks.toggle(story)} hitSlop={10} style={s.iconBtn} accessibilityLabel={saved ? 'Remove bookmark' : 'Bookmark story'}>
-            <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={21} color={saved ? (t.isDark ? BRAND.lime : BRAND.navy) : t.text} />
+          <Pressable onPress={toggleBookmark} hitSlop={8} style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]} accessibilityLabel={saved ? 'Remove bookmark' : 'Bookmark story'}>
+            <Animated.View style={{ transform: [{ scale: bookmarkScale }] }}>
+              <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={21} color={saved ? (t.isDark ? BRAND.lime : BRAND.navy) : t.text} />
+            </Animated.View>
           </Pressable>
-          <Pressable onPress={share} hitSlop={10} style={s.iconBtn} accessibilityLabel="Share story">
-            <Ionicons name="share-social-outline" size={22} color={t.text} />
+          <Pressable onPress={share} hitSlop={8} style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]} accessibilityLabel="Share story">
+            <Ionicons name="share-social-outline" size={21} color={t.text} />
           </Pressable>
         </View>
       </View>
+
       <View style={s.below}>
-        <Text style={s.belowText} numberOfLines={1}>
-          AI-generated summary · Not investment advice
-        </Text>
+        <Text style={s.belowText} numberOfLines={1}>AI-generated summary · Not investment advice</Text>
         {story.image && (
           <Pressable onPress={() => WebBrowser.openBrowserAsync(story.image!.photographerUrl).catch(() => {})} hitSlop={6} accessibilityRole="link">
-            <Text style={s.belowText} numberOfLines={1}>
-              Representative image · Photo: {story.image.photographer} / {story.image.providerName}
-            </Text>
+            <Text style={s.belowText} numberOfLines={1}>Representative image · Photo: {story.image.photographer} / {story.image.providerName}</Text>
           </Pressable>
         )}
       </View>
-    </View>
-  );
-}
-
-function PendingSummary({ t }: { t: Theme }) {
-  const pulse = useRef(new Animated.Value(0.4)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.4, duration: 700, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
-  return (
-    <View style={{ marginTop: 14 }}>
-      {[100, 94, 97, 60].map((w, i) => (
-        <Animated.View key={i} style={{ height: 14, width: `${w}%`, borderRadius: 7, backgroundColor: t.shimmer, marginBottom: 10, opacity: pulse }} />
-      ))}
-      <Text style={{ color: t.textMuted, fontSize: 13, marginTop: 2 }}>✨ Writing a quick summary…</Text>
     </View>
   );
 }
@@ -183,47 +166,47 @@ export const NewsCard = memo(NewsCardImpl);
 
 const styles = (t: Theme) =>
   StyleSheet.create({
-    page: { flex: 1, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6 },
+    page: { flex: 1, paddingHorizontal: 12, paddingTop: 4, paddingBottom: 4 },
     card: {
       flex: 1,
       backgroundColor: t.card,
-      borderRadius: 24,
+      borderRadius: 26,
       overflow: 'hidden',
-      shadowColor: '#000',
-      shadowOpacity: t.isDark ? 0 : 0.08,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 6 },
-      elevation: 3,
+      shadowColor: '#0b1530',
+      shadowOpacity: t.isDark ? 0 : 0.07,
+      shadowRadius: 20,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 2,
       borderWidth: t.isDark ? 1 : 0,
       borderColor: t.border,
     },
-    banner: { height: 150, padding: 16, justifyContent: 'space-between', overflow: 'hidden' },
+    banner: { padding: 14, justifyContent: 'space-between', overflow: 'hidden' },
     bannerBgIcon: { position: 'absolute', right: -14, bottom: -24 },
     bannerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    catPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-    catText: { color: '#fff', fontWeight: '700', fontSize: 13, letterSpacing: 0.3 },
-    region: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' },
-    regionPhoto: { backgroundColor: 'rgba(0,0,0,0.35)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, overflow: 'hidden' },
-    bannerBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-    source: { color: '#fff', fontSize: 15, fontWeight: '700', flexShrink: 1, marginRight: 8, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4 },
-    time: { color: 'rgba(255,255,255,0.85)', fontSize: 13 },
-    body: { flex: 1, paddingHorizontal: 18, paddingTop: 10, overflow: 'hidden' },
-    title: { color: t.text, fontSize: 20, lineHeight: 26, fontWeight: '800', letterSpacing: -0.2 },
-    summary: { color: t.text, fontSize: 16, lineHeight: 24, marginTop: 10, opacity: 0.92 },
-    noSummary: { color: t.textMuted, fontSize: 15, lineHeight: 22, marginTop: 12, fontStyle: 'italic' },
-    meta: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 12 },
-    chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-    chip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.chip, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, maxWidth: '60%' },
-    chipText: { color: t.chipText, fontWeight: '700', fontSize: 13 },
-    chipEx: { color: t.textMuted, fontSize: 10, fontWeight: '600' },
-    badge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20 },
-    badgeText: { fontSize: 12.5, fontWeight: '600' },
-    dots: { flexDirection: 'row', gap: 3 },
-    dot: { width: 6, height: 6, borderRadius: 3 },
-    footer: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingBottom: 14 },
-    readMore: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: BRAND.navy, paddingVertical: 13, borderRadius: 14 },
-    readMoreText: { color: '#fff', fontWeight: '700', fontSize: 15, flexShrink: 1 },
-    iconBtn: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: t.tabIdle },
+    glass: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(15,23,42,0.45)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.25)' },
+    glassText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+    bannerBottom: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+    avatar: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.85)' },
+    avatarText: { color: '#fff', fontWeight: '800', fontSize: 11 },
+    source: { color: '#fff', fontSize: 14, fontWeight: '700', flexShrink: 1, textShadowColor: 'rgba(0,0,0,0.4)', textShadowRadius: 4 },
+    dot: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
+    time: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '500' },
+    body: { flex: 1, paddingHorizontal: 18, paddingTop: 14, overflow: 'hidden' },
+    title: { color: t.text, fontSize: 20.5, lineHeight: 27, fontWeight: '800', letterSpacing: -0.3 },
+    summary: { color: t.textBody, fontSize: 16, lineHeight: 25, marginTop: 10, letterSpacing: 0.05 },
+    noSummary: { color: t.textMuted, fontSize: 15, lineHeight: 22, marginTop: 10, fontStyle: 'italic' },
+    pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 14 },
+    pill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, maxWidth: '70%' },
+    pillText: { fontSize: 12.5, fontWeight: '700' },
+    dots: { flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
+    dotBar: { width: 3, borderRadius: 1.5 },
+    ticker: { backgroundColor: t.chip },
+    tickerText: { color: t.chipText, fontWeight: '800', fontSize: 12.5, flexShrink: 1 },
+    tickerEx: { color: t.textMuted, fontSize: 10, fontWeight: '700' },
+    footer: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 14 },
+    readMore: { flex: 1, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: BRAND.navy, borderRadius: 25 },
+    readMoreText: { color: '#fff', fontWeight: '700', fontSize: 15.5 },
+    iconBtn: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: t.tabIdle },
     below: { alignItems: 'center', paddingTop: 5, gap: 1 },
     belowText: { color: t.textMuted, fontSize: 10.5, textAlign: 'center' },
   });

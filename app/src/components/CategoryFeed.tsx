@@ -113,7 +113,7 @@ export function CategoryFeed({ region, category }: { region: RegionFilter; categ
           data={items}
           keyExtractor={(s: Story) => s.id}
           renderItem={({ item, index: i }: { item: Story; index: number }) => (
-            <StackedCard index={i} height={h} scrollY={scrollY}>
+            <StackedCard index={i} height={h} scrollY={scrollY} last={i === items.length - 1}>
               <NewsCard story={item} showCategory={category === null} />
             </StackedCard>
           )}
@@ -131,11 +131,11 @@ export function CategoryFeed({ region, category }: { region: RegionFilter; categ
           refreshControl={<RefreshControl refreshing={pulling} onRefresh={onRefresh} tintColor={t.isDark ? BRAND.lime : BRAND.navy} colors={[BRAND.navy]} />}
           onEndReached={() => { if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage(); }}
           onEndReachedThreshold={3}
-          initialNumToRender={2}
-          maxToRenderPerBatch={2}
+          initialNumToRender={3}
+          maxToRenderPerBatch={3}
           windowSize={5}
           ListEmptyComponent={
-            <View style={{ height: h }}>
+            <View style={{ height: h, backgroundColor: t.bg }}>
               <Centered>
                 <Ionicons name="newspaper-outline" size={48} color={t.textMuted} />
                 <Text style={[s.msg, { color: t.text }]}>No stories here yet</Text>
@@ -145,7 +145,7 @@ export function CategoryFeed({ region, category }: { region: RegionFilter; categ
           }
           ListFooterComponent={
             items.length > 0 ? (
-              <View style={{ height: h }}>
+              <View style={{ height: h, backgroundColor: t.bg }}>
                 <Centered>
                   {query.hasNextPage || query.isFetchingNextPage ? (
                     <ActivityIndicator size="large" color={t.isDark ? BRAND.lime : BRAND.navy} />
