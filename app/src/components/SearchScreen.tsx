@@ -16,7 +16,7 @@ import { StoryViewer } from './StoryViewer';
 const POPULAR = ['Nifty', 'Sensex', 'RBI', 'Gold', 'Crude oil', 'Rupee', 'IPO', 'Results', 'Fed', 'Inflation'];
 
 /** Search & Discover: search box, recent and popular searches, trending companies, topics. */
-export function SearchScreen({ visible, onClose, onOpenTab }: { visible: boolean; onClose: () => void; onOpenTab: (tabIndex: number) => void }) {
+export function SearchScreen({ visible, onClose, onOpenTab, initialQuery }: { visible: boolean; onClose: () => void; onOpenTab: (tabIndex: number) => void; initialQuery?: { q: string; n: number } }) {
   const t = useTheme();
   const st = styles(t);
   const insets = useSafeAreaInsets();
@@ -24,6 +24,15 @@ export function SearchScreen({ visible, onClose, onOpenTab }: { visible: boolean
   const [q, setQ] = useState('');
   const [viewer, setViewer] = useState<{ start: number } | null>(null);
   const recent = useRecentSearches();
+
+  // Opened from a company tag: search for it straight away (and close any open card).
+  useEffect(() => {
+    if (!initialQuery?.q) return;
+    setText(initialQuery.q);
+    setQ(initialQuery.q);
+    setViewer(null);
+    recent.add(initialQuery.q);
+  }, [initialQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Search as you type, after a short pause.
   useEffect(() => {

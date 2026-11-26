@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBookmarks } from '../lib/bookmarks';
+import { OpenSearchContext } from '../lib/openSearch';
 import { useTourRef } from '../lib/tour';
 import type { RegionFilter } from '../lib/types';
 import { BRAND, useTheme } from '../theme';
@@ -28,6 +29,16 @@ export function FeedScreen() {
   const [alertStory, setAlertStory] = useState<Story[] | null>(null);
   const [savedOpen, setSavedOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<{ q: string; n: number } | undefined>(undefined);
+  // Company tags on cards open Search for that company (also from alert and search cards).
+  const openSearch = useCallback((q: string) => {
+    const show = () => {
+      setSearchQuery((prev) => ({ q, n: (prev?.n ?? 0) + 1 }));
+      setSearchOpen(true);
+    };
+    // iOS cannot open one full-screen view while another is closing, so wait for the alert card to close.
+    setAlertStory((open) => { if (open) setTimeout(show, 450); else show(); return null; });
+  }, []);
   const pager = useRef<PagerHandle>(null);
   const { saved } = useBookmarks();
   // After the app has been in the background for a while, rebuild the news area and start from the
@@ -58,6 +69,7 @@ export function FeedScreen() {
   };
 
   return (
+    <OpenSearchContext.Provider value={openSearch}>
     <View style={[s.root, { backgroundColor: t.bg, paddingTop: insets.top }]}>
       <View style={s.header}>
         <View>
@@ -103,8 +115,9 @@ export function FeedScreen() {
       <TourOverlay />
       <StoryViewer stories={alertStory} start={0} title="Breaking news" onClose={() => setAlertStory(null)} />
       <SavedSheet visible={savedOpen} onClose={() => setSavedOpen(false)} />
-      <SearchScreen visible={searchOpen} onClose={() => setSearchOpen(false)} onOpenTab={selectTab} />
+      <SearchScreen visible={searchOpen} onClose={() => { setSearchOpen(false); setSearchQuery(undefined); }} onOpenTab={selectTab} initialQuery={searchQuery} />
     </View>
+    </OpenSearchContext.Provider>
   );
 }
 

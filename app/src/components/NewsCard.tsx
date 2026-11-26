@@ -6,6 +6,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { memo, useRef } from 'react';
 import { Animated, Pressable, Share, StyleSheet, Text, useWindowDimensions, View, type HostInstance } from 'react-native';
 import { useBookmarks } from '../lib/bookmarks';
+import { useOpenSearch } from '../lib/openSearch';
 import { useTour } from '../lib/tour';
 import { timeAgo } from '../lib/time';
 import type { Story } from '../lib/types';
@@ -25,6 +26,7 @@ function NewsCardImpl({ story, showCategory = true, tourAnchor = false }: Props)
   const t = useTheme();
   const s = styles(t);
   const bookmarks = useBookmarks();
+  const openSearch = useOpenSearch();
   const saved = bookmarks.isSaved(story.id);
   const cat = categoryMeta(story.category);
   const sentiment = story.sentiment ? SENTIMENT[story.sentiment] : null;
@@ -130,10 +132,17 @@ function NewsCardImpl({ story, showCategory = true, tourAnchor = false }: Props)
               </View>
             )}
             {story.companies.map((c) => (
-              <View key={c.name} style={[s.pill, s.ticker]}>
+              <Pressable
+                key={c.name}
+                onPress={() => { Haptics.selectionAsync().catch(() => {}); openSearch(c.name); }}
+                style={({ pressed }) => [s.pill, s.ticker, pressed && { opacity: 0.7 }]}
+                accessibilityRole="button"
+                accessibilityLabel={`More news about ${c.name}`}
+              >
                 <Text style={s.tickerText} numberOfLines={1}>{c.symbol ?? c.name}</Text>
                 {c.symbol && c.exchange ? <Text style={s.tickerEx}>{c.exchange}</Text> : null}
-              </View>
+                <Ionicons name="chevron-forward" size={12} color={t.chipText} />
+              </Pressable>
             ))}
           </View>
         </View>
