@@ -158,7 +158,9 @@ async function ingestOne(env: Env, sourceId: string) {
     }
   }
   await saveSourceState(env.DB, source.id, now, { ok: true, etag: r.fetch.etag, lastModified: r.fetch.lastModified, newItems: inserted });
-  return { source: source.id, status: r.fetch.status, parsed: r.parsed, inserted, stale: r.stale, routine: r.routine };
+  // Summarize new stories straight away instead of waiting for the next cron run (saves up to 2 minutes).
+  const enriched = inserted > 0 ? await enrichOnce(env).catch((e) => ({ error: String((e as Error).message) })) : undefined;
+  return { source: source.id, status: r.fetch.status, parsed: r.parsed, inserted, stale: r.stale, routine: r.routine, enriched };
 }
 
 async function enrichOnce(env: Env) {

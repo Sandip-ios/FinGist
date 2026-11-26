@@ -19,6 +19,7 @@ export function CategoryFeed({ region, category }: { region: RegionFilter; categ
   const list = useRef<FlatList<Story>>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
   const topSeenId = useRef<string | null>(null);
+  const currentId = useRef<string | null>(null);
 
   const query = useInfiniteQuery({
     queryKey: ['feed', region, category],
@@ -39,11 +40,26 @@ export function CategoryFeed({ region, category }: { region: RegionFilter; categ
   useEffect(() => {
     if (items[0] && (topSeenId.current === null || index === 0)) topSeenId.current = items[0].id;
   }, [items, index]);
+  // Keep the reader on the story they were reading when the list changes (refresh, new stories).
+  // If that story is gone, go back to the newest one, so the screen is never left on an empty spot.
+  useEffect(() => {
+    if (!h || items.length === 0) return;
+    const id = currentId.current;
+    const idx = id ? items.findIndex((x) => x.id === id) : 0;
+    const target = idx >= 0 ? idx : 0;
+    if (target !== index || idx < 0) {
+      list.current?.scrollToOffset({ offset: target * h, animated: false });
+      setIndex(target);
+      currentId.current = items[target]?.id ?? null;
+    }
+  }, [items, h]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const newCount = topSeenId.current ? Math.max(0, items.findIndex((s) => s.id === topSeenId.current)) : 0;
 
   const goTop = useCallback(() => {
     list.current?.scrollToOffset({ offset: 0, animated: true });
     setIndex(0);
+    currentId.current = items[0]?.id ?? null;
     if (items[0]) topSeenId.current = items[0].id;
   }, [items]);
 
@@ -57,7 +73,8 @@ export function CategoryFeed({ region, category }: { region: RegionFilter; categ
 
   const onSettled = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!h) return;
-    const i = Math.round(e.nativeEvent.contentOffset.y / h);
+    const i = Math.max(0, Math.min(items.length, Math.round(e.nativeEvent.contentOffset.y / h)));
+    currentId.current = items[i]?.id ?? currentId.current;
     if (i !== index) {
       setIndex(i);
       Haptics.selectionAsync().catch(() => {});
@@ -79,12 +96,15 @@ export function CategoryFeed({ region, category }: { region: RegionFilter; categ
   }
 
   return (
-    <View style={{ flex: 1 }} onLayout={(e) => setH(Math.round(e.nativeEvent.layout.height))}>
+    <View style={{ flex: 1 }} onLayout={(e) => { const v = Math.round(e.nativeEvent.layout.height); if (v > 0) setH(v); }}>
       {query.isError && (
         <View style={[s.offline, { backgroundColor: t.tabIdle }]}>
           <Ionicons name="cloud-offline-outline" size={14} color={t.textMuted} />
           <Text style={[s.offlineText, { color: t.textMuted }]}>Offline · showing saved stories</Text>
         </View>
+      )}
+      {h === 0 && (
+        <Centered><ActivityIndicator color={t.isDark ? BRAND.lime : BRAND.navy} /></Centered>
       )}
       {h > 0 && (
         <Animated.FlatList
@@ -107,8 +127,6 @@ export function CategoryFeed({ region, category }: { region: RegionFilter; categ
           showsVerticalScrollIndicator={false}
           onMomentumScrollEnd={onSettled}
           onScrollEndDrag={(e) => { if (Math.abs(e.nativeEvent.velocity?.y ?? 0) < 0.05) onSettled(e); }}
-          // Keep the reader on the same story when new ones arrive at the top.
-          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           refreshControl={<RefreshControl refreshing={pulling} onRefresh={onRefresh} tintColor={t.isDark ? BRAND.lime : BRAND.navy} colors={[BRAND.navy]} />}
           onEndReached={() => { if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage(); }}
           onEndReachedThreshold={3}
@@ -147,7 +165,7 @@ export function CategoryFeed({ region, category }: { region: RegionFilter; categ
       {newCount > 0 && index > 0 && (
         <Pressable style={s.newPill} onPress={goTop}>
           <Ionicons name="arrow-up" size={14} color="#fff" />
-          <Text style={s.newPillText}>{newCount} new {newCount === 1 ? 'story' : 'stories'}</Text>
+          <Text style={s.newPillText}>{newCount} new news</Text>
         </Pressable>
       )}
     </View>
