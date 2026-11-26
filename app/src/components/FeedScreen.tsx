@@ -10,6 +10,7 @@ import { CategoryFeed } from './CategoryFeed';
 import { FilterBar, TABS } from './FilterBar';
 import { Pager, type PagerHandle } from './Pager';
 import { SavedSheet } from './SavedSheet';
+import { SearchScreen } from './SearchScreen';
 
 export function FeedScreen() {
   const t = useTheme();
@@ -18,6 +19,7 @@ export function FeedScreen() {
   const [tab, setTab] = useState(0);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const pager = useRef<PagerHandle>(null);
   const { saved } = useBookmarks();
 
@@ -33,6 +35,9 @@ export function FeedScreen() {
           Fin<Text style={{ color: t.isDark ? BRAND.lime : '#5fa80f' }}>Gist</Text>
         </Text>
         <View style={s.headerIcons}>
+          <Pressable onPress={() => setSearchOpen(true)} hitSlop={10} accessibilityLabel="Search news">
+            <Ionicons name="search" size={24} color={t.text} />
+          </Pressable>
           <Pressable onPress={() => setSavedOpen(true)} hitSlop={10} accessibilityLabel={`Saved stories (${saved.length})`}>
             <Ionicons name={saved.length ? 'bookmarks' : 'bookmarks-outline'} size={23} color={t.text} />
             {saved.length > 0 && (
@@ -63,6 +68,7 @@ export function FeedScreen() {
 
       <AboutSheet visible={aboutOpen} onClose={() => setAboutOpen(false)} />
       <SavedSheet visible={savedOpen} onClose={() => setSavedOpen(false)} />
+      <SearchScreen visible={searchOpen} onClose={() => setSearchOpen(false)} onOpenTab={selectTab} />
     </View>
   );
 }

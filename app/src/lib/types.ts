@@ -44,3 +44,9 @@ export interface FeedPage {
 }
 
 export type RegionFilter = 'all' | 'india' | 'global';
+
+export interface TrendingCompany {
+  name: string;
+  symbol: string | null;
+  count: number;
+}

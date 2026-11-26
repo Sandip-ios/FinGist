@@ -6,7 +6,7 @@ import { IMAGE_TOPICS } from './data/imageTopics';
 import { dedupeList, titleTokens } from './ingest/dedupe';
 import { collectSource } from './pipeline';
 import {
-  existingIds, getPhotoCache, getSourceStates, recentTopics, releaseLease, savePhotos, saveSourceState, topicsToRefresh, insertStories, leasePending, markFailed, queryFeed, recentTitles, saveEnrichment,
+  existingIds, getPhotoCache, searchStories, trendingCompanies, getSourceStates, recentTopics, releaseLease, savePhotos, saveSourceState, topicsToRefresh, insertStories, leasePending, markFailed, queryFeed, recentTitles, saveEnrichment,
 } from './store/db';
 import { CATEGORIES } from './types';
 
@@ -96,6 +96,21 @@ export default {
         200,
         { 'cache-control': 'public, max-age=30' },
       );
+    }
+
+    if (path === '/v1/search' && req.method === 'GET') {
+      const q = (url.searchParams.get('q') ?? '').slice(0, 100);
+      const before = Number(url.searchParams.get('before')) || undefined;
+      const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 30, 1), 50);
+      const photos = await getPhotoCache(env.DB);
+      const items = await searchStories(env.DB, q, { before, limit }, photos);
+      const last = items[items.length - 1];
+      return json({ items, nextBefore: items.length === limit && last ? last.publishedAt : null }, 200, { 'cache-control': 'public, max-age=60' });
+    }
+
+    if (path === '/v1/trending' && req.method === 'GET') {
+      const companies = await trendingCompanies(env.DB, Date.now() - 24 * 3_600_000);
+      return json({ companies }, 200, { 'cache-control': 'public, max-age=300' });
     }
 
     if (path === '/v1/sources') {

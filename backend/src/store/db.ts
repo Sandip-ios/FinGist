@@ -152,7 +152,13 @@ export async function queryFeed(db: D1Database, q: FeedQuery, photos?: Map<strin
     )
     .bind(...binds)
     .all<Record<string, unknown>>();
-  return results.map((r) => ({
+  return results.map((r) => toCard(r, photos));
+}
+
+const CARD_COLUMNS = 's.id, s.source_name, s.url, s.title, s.summary, s.category, s.sentiment, s.relevance, s.region, s.region_impact, s.kind, s.companies, s.published_at, s.status, s.image_topic';
+
+function toCard(r: Record<string, unknown>, photos?: Map<string, Photo[]>) {
+  return {
     id: r.id,
     title: r.title,
     summary: r.summary ?? null,
@@ -167,7 +173,48 @@ export async function queryFeed(db: D1Database, q: FeedQuery, photos?: Map<strin
     companies: r.companies ? JSON.parse(r.companies as string) : [],
     publishedAt: r.published_at,
     image: photos ? imageFor(photos, r.id as string, r.image_topic as string | null, r.category as string | null) : null,
-  }));
+  };
+}
+
+/** Turns user text into a safe FTS5 query: every word must match, as a prefix ("infos" finds Infosys). */
+export function toFtsQuery(q: string): string | null {
+  const words = q
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}&.\- ]+/gu, ' ')
+    .split(/\s+/)
+    .map((w) => w.replace(/^[.\-&]+|[.\-&]+$/g, ''))
+    .filter((w) => w.length > 0)
+    .slice(0, 8);
+  if (!words.length) return null;
+  return words.map((w) => `"${w.replace(/"/g, '')}"*`).join(' ');
+}
+
+export async function searchStories(db: D1Database, q: string, opts: { before?: number; limit: number }, photos?: Map<string, Photo[]>) {
+  const fts = toFtsQuery(q);
+  if (!fts) return [];
+  const binds: (string | number)[] = [fts];
+  let where = `stories_fts MATCH ?1 AND s.status = 'ready' AND s.summary IS NOT NULL`;
+  if (opts.before) { binds.push(opts.before); where += ` AND s.published_at < ?${binds.length}`; }
+  binds.push(opts.limit);
+  const { results } = await db
+    .prepare(`SELECT ${CARD_COLUMNS} FROM stories_fts JOIN stories s ON s.rowid = stories_fts.rowid WHERE ${where} ORDER BY s.published_at DESC LIMIT ?${binds.length}`)
+    .bind(...binds)
+    .all<Record<string, unknown>>();
+  return results.map((r) => toCard(r, photos));
+}
+
+/** Companies mentioned most in recent published cards. */
+export async function trendingCompanies(db: D1Database, since: number, limit = 12) {
+  const { results } = await db
+    .prepare(
+      `SELECT MIN(json_extract(c.value, '$.name')) AS name, MAX(json_extract(c.value, '$.symbol')) AS symbol, COUNT(*) AS n
+       FROM stories s, json_each(s.companies) c
+       WHERE s.published_at > ?1 AND s.status = 'ready' AND s.summary IS NOT NULL
+       GROUP BY lower(json_extract(c.value, '$.name')) ORDER BY n DESC, MAX(s.published_at) DESC LIMIT ?2`,
+    )
+    .bind(since, limit)
+    .all<{ name: string; symbol: string | null; n: number }>();
+  return results.filter((r) => r.name).map((r) => ({ name: r.name, symbol: r.symbol ?? null, count: r.n }));
 }
 
 const GENERIC_TOPICS: ImageTopic[] = ['stock_market', 'trading_screen', 'economy_growth', 'business_meeting'];

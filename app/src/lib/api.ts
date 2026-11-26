@@ -1,5 +1,5 @@
 import Constants from 'expo-constants';
-import type { FeedPage, RegionFilter } from './types';
+import type { FeedPage, RegionFilter, TrendingCompany } from './types';
 
 const API_URL: string =
   process.env.EXPO_PUBLIC_API_URL ??
@@ -20,4 +20,18 @@ export async function fetchFeed(opts: {
   const res = await fetch(`${API_URL}/v1/feed?${params}`, { signal: opts.signal, headers: { accept: 'application/json' } });
   if (!res.ok) throw new Error(`Server error (${res.status})`);
   return (await res.json()) as FeedPage;
+}
+
+export async function searchStories(opts: { q: string; before?: number | null; signal?: AbortSignal }): Promise<FeedPage> {
+  const params = new URLSearchParams({ q: opts.q, limit: '30' });
+  if (opts.before) params.set('before', String(opts.before));
+  const res = await fetch(`${API_URL}/v1/search?${params}`, { signal: opts.signal, headers: { accept: 'application/json' } });
+  if (!res.ok) throw new Error(`Server error (${res.status})`);
+  return (await res.json()) as FeedPage;
+}
+
+export async function fetchTrending(signal?: AbortSignal): Promise<TrendingCompany[]> {
+  const res = await fetch(`${API_URL}/v1/trending`, { signal, headers: { accept: 'application/json' } });
+  if (!res.ok) throw new Error(`Server error (${res.status})`);
+  return ((await res.json()) as { companies: TrendingCompany[] }).companies;
 }

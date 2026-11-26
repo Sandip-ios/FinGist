@@ -11,6 +11,8 @@ Cron (every 2 min) ──► /internal/ingest/<source>  (one invocation per due 
                          Gemini JSON → validate (word count, numbers, advice words, tickers)
                          → "ready" (summary) | "ready" without summary (headline only) | "rejected" (not market news)
 App ──► GET /v1/feed?region=india|global&category=…&before=<ms>&limit=30
+        GET /v1/search?q=infosys&before=<ms>   (full-text search over published cards)
+        GET /v1/trending                        (companies most in the news, last 24h)
         GET /v1/sources   (feed health)   GET /health
 ```
 
