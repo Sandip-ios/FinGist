@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBookmarks } from '../lib/bookmarks';
 import { useTourRef } from '../lib/tour';
@@ -30,6 +30,18 @@ export function FeedScreen() {
   const [searchOpen, setSearchOpen] = useState(false);
   const pager = useRef<PagerHandle>(null);
   const { saved } = useBookmarks();
+  // After the app has been in the background for a while, rebuild the news area and start from the
+  // newest story. Long background periods can leave iOS pages undrawn (blank screen).
+  const [resumeKey, setResumeKey] = useState(0);
+  const backgroundAt = useRef<number | null>(null);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background') backgroundAt.current = Date.now();
+      if (state === 'active' && backgroundAt.current && Date.now() - backgroundAt.current > 60_000) setResumeKey((k) => k + 1);
+      if (state === 'active') backgroundAt.current = null;
+    });
+    return () => sub.remove();
+  }, []);
   const searchRef = useTourRef('search');
   const savedRef = useTourRef('saved');
   const menuRef = useTourRef('menu');
@@ -76,10 +88,10 @@ export function FeedScreen() {
 
       <View style={{ flex: 1, paddingBottom: insets.bottom }}>
         {/* Swipe left/right to change category; up/down for the next story. */}
-        <Pager ref={pager} onPageSelected={setTab}>
+        <Pager key={resumeKey} ref={pager} initialPage={tab} onPageSelected={setTab}>
           {TABS.map((c, i) => (
             <View key={c.id ?? 'top'} collapsable={false} style={{ flex: 1 }}>
-              {Math.abs(i - tab) <= 1 ? <CategoryFeed key={region} region={region} category={c.id} /> : null}
+              {Math.abs(i - tab) <= 1 ? <CategoryFeed key={`${region}-${resumeKey}`} region={region} category={c.id} /> : null}
             </View>
           ))}
         </Pager>
