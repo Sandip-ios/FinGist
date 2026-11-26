@@ -51,3 +51,12 @@ describe('helpers', () => {
     expect(wordCount('  a b  c ')).toBe(3);
   });
 });
+
+describe('image topic', () => {
+  it('keeps a valid topic and drops an unknown one', () => {
+    const ok = validateEnrichment(story, { ...base, summary: words(35), image_topic: 'gold' });
+    const bad = validateEnrichment(story, { ...base, summary: words(35), image_topic: 'unicorns' });
+    expect(ok.imageTopic).toBe('gold');
+    expect(bad.imageTopic).toBeNull();
+  });
+});

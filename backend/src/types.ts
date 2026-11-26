@@ -80,6 +80,8 @@ export interface Enrichment {
   regionImpact: RegionImpact;
   marketRelevant: boolean;
   companies: Company[];
+  /** Illustration topic for the card photo (see data/imageTopics.ts). */
+  imageTopic: string | null;
   /** Validation notes, e.g. "unverified_number:12.5". */
   flags: string[];
 }

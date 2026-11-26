@@ -40,6 +40,9 @@ export function AboutSheet({ visible, onClose }: { visible: boolean; onClose: ()
           <Section icon="newspaper" title="Sources">
             {`News belongs to its publishers. FinGist shows only headlines, short summaries and links to the original articles. Current sources: ${SOURCES}.`}
           </Section>
+          <Section icon="image" title="Photos">
+            Card photos are representative images from Pexels (pexels.com), used under the free Pexels licence. They illustrate the topic and are not photos of the actual event. Photographers are credited on each card.
+          </Section>
           <Text style={[s.version, { color: t.textMuted }]}>Version {Constants.expoConfig?.version ?? '1.0.0'}</Text>
         </ScrollView>
       </View>

@@ -48,10 +48,17 @@ npx wrangler login
 npx wrangler d1 create fingist          # copy the database_id into wrangler.toml
 npm run db:migrate:remote
 npx wrangler secret put GEMINI_API_KEY
-npx wrangler secret put INTERNAL_KEY    # any long random string
+openssl rand -hex 32 | npx wrangler secret put INTERNAL_KEY
+npx wrangler secret put PEXELS_API_KEY  # optional: free key from https://www.pexels.com/api/ (card photos)
 npm run deploy
 ```
 Then open `https://fingist-api.<your-subdomain>.workers.dev/v1/feed`.
+
+## Card photos (Pexels)
+The AI picks an illustration topic for each story (`src/data/imageTopics.ts`, e.g. gold, central_bank,
+technology_it). With `PEXELS_API_KEY` set, the cron fetches up to 15 free-licence Pexels photos per topic
+(3 topics per run, refreshed weekly) into the `image_cache` table, and `/v1/feed` returns one photo per story
+with the photographer credit. Without the key, cards show the coloured category banner.
 
 ## Free-tier budget (approx.)
 - Workers: ~720 cron runs/day, ~15–20k requests/day (limit 100k). Each feed/AI batch runs as its own invocation to stay within per-invocation CPU limits.

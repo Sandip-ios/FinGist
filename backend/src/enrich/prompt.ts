@@ -1,3 +1,4 @@
+import { IMAGE_TOPIC_IDS } from '../data/imageTopics';
 import { CATEGORIES, REGION_IMPACT, RELEVANCE, SENTIMENTS, type Story } from '../types';
 
 export const SYSTEM_PROMPT = `You write news cards for FinGist, a financial news app for Indian and global retail investors.
@@ -21,6 +22,9 @@ For EACH story you receive (headline + short feed description), return:
 - region_impact: ${REGION_IMPACT.join(', ')}.
 - companies: listed companies the story is mainly about (max 4). symbol = official exchange ticker if you are confident, else null.
   exchange = NSE, BSE, NYSE, NASDAQ, LSE, etc., or null. Prefer NSE for Indian companies. Do not include unlisted companies' symbols.
+- image_topic: the best illustration for the card, one of: ${IMAGE_TOPIC_IDS.join(', ')}.
+  Pick what the story is about (e.g. gold price -> gold, RBI policy -> central_bank, Infosys results -> technology_it,
+  Nifty/Sensex move -> stock_exchange_india, US stocks -> wall_street).
 
 Return a JSON array with one object per input story, in any order, each carrying the story's "id".`;
 
@@ -51,6 +55,7 @@ export const RESPONSE_SCHEMA = {
       relevance: { type: 'STRING', enum: [...RELEVANCE] },
       market_relevant: { type: 'BOOLEAN' },
       region_impact: { type: 'STRING', enum: [...REGION_IMPACT] },
+      image_topic: { type: 'STRING', enum: [...IMAGE_TOPIC_IDS] },
       companies: {
         type: 'ARRAY',
         items: {

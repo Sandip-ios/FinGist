@@ -24,6 +24,16 @@ export interface Story {
   kind: 'news' | 'filing' | 'regulator';
   companies: Company[];
   publishedAt: number;
+  /** Representative photo (Pexels, free licence) with credit; null = coloured banner. */
+  image?: StoryImage | null;
+}
+
+export interface StoryImage {
+  url: string;
+  photographer: string;
+  photographerUrl: string;
+  pexelsUrl: string;
+  color: string | null;
 }
 
 export interface FeedPage {

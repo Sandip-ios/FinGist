@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import { memo, useEffect, useRef } from 'react';
-import { Animated, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { timeAgo } from '../lib/time';
 import type { Story } from '../lib/types';
 import { BRAND, categoryMeta, RELEVANCE, SENTIMENT, useTheme, type Theme } from '../theme';
@@ -20,6 +21,9 @@ function NewsCardImpl({ story, index, total }: Props) {
   const sentiment = story.sentiment ? SENTIMENT[story.sentiment] : null;
   const relevance = story.relevance ? RELEVANCE[story.relevance] : null;
   const s = styles(t);
+  const { height: screenH } = useWindowDimensions();
+  // Photo banner scales with the screen so the text always fits on smaller phones.
+  const photoH = Math.round(Math.min(200, Math.max(130, screenH * 0.21)));
 
   const openArticle = async () => {
     Haptics.selectionAsync().catch(() => {});
@@ -40,14 +44,30 @@ function NewsCardImpl({ story, index, total }: Props) {
   return (
     <View style={s.page}>
       <View style={s.card}>
-        <LinearGradient colors={cat.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.banner}>
-          <Ionicons name={cat.icon} size={110} color="rgba(255,255,255,0.08)" style={s.bannerBgIcon} />
+        <View style={[s.banner, story.image && { height: photoH }]}>
+          {story.image ? (
+            <>
+              <Image
+                source={{ uri: story.image.url }}
+                style={[StyleSheet.absoluteFill, { backgroundColor: story.image.color ?? cat.colors[1] }]}
+                contentFit="cover"
+                transition={250}
+                cachePolicy="memory-disk"
+                accessible={false}
+              />
+              <LinearGradient colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.75)']} locations={[0, 0.35, 1]} style={StyleSheet.absoluteFill} />
+            </>
+          ) : (
+            <LinearGradient colors={cat.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill}>
+              <Ionicons name={cat.icon} size={110} color="rgba(255,255,255,0.08)" style={s.bannerBgIcon} />
+            </LinearGradient>
+          )}
           <View style={s.bannerTop}>
-            <View style={s.catPill}>
+            <View style={[s.catPill, story.image && { backgroundColor: cat.colors[0] }]}>
               <Ionicons name={cat.icon} size={14} color="#fff" />
               <Text style={s.catText}>{cat.label}</Text>
             </View>
-            <Text style={s.region}>{regionLabel}</Text>
+            <Text style={[s.region, story.image && s.regionPhoto]}>{regionLabel}</Text>
           </View>
           <View style={s.bannerBottom}>
             <Text style={s.source} numberOfLines={1}>
@@ -56,10 +76,17 @@ function NewsCardImpl({ story, index, total }: Props) {
             </Text>
             <Text style={s.time}>{timeAgo(story.publishedAt)}</Text>
           </View>
-        </LinearGradient>
+        </View>
+        {story.image && (
+          <Pressable onPress={() => WebBrowser.openBrowserAsync(story.image!.pexelsUrl).catch(() => {})} hitSlop={6} accessibilityRole="link">
+            <Text style={s.credit} numberOfLines={1}>
+              Representative image · Photo: {story.image.photographer} / Pexels
+            </Text>
+          </Pressable>
+        )}
 
         <View style={s.body}>
-          <Text style={s.title} accessibilityRole="header">
+          <Text style={s.title} accessibilityRole="header" numberOfLines={5}>
             {story.title}
           </Text>
 
@@ -71,40 +98,33 @@ function NewsCardImpl({ story, index, total }: Props) {
             <Text style={s.noSummary}>Summary not available for this story. Tap “Read more” for the full article.</Text>
           )}
 
-          {story.companies.length > 0 && (
-            <View style={s.chips}>
-              {story.companies.map((c) => (
-                <View key={c.name} style={s.chip}>
-                  <Text style={s.chipText}>{c.symbol ? `${c.symbol}` : c.name}</Text>
-                  {c.symbol && c.exchange ? <Text style={s.chipEx}>{c.exchange}</Text> : null}
-                </View>
-              ))}
-            </View>
-          )}
+        </View>
 
-          {(sentiment || relevance) && (
-            <View style={s.badges}>
-              {sentiment && (
-                <View style={[s.badge, { borderColor: sentiment.color }]}>
-                  <Ionicons name={sentiment.icon} size={14} color={sentiment.color} />
-                  <Text style={[s.badgeText, { color: sentiment.color }]}>{sentiment.label}</Text>
+        <View style={s.meta}>
+          <View style={s.chips}>
+            {story.companies.map((c) => (
+              <View key={c.name} style={s.chip}>
+                <Text style={s.chipText} numberOfLines={1}>{c.symbol ? `${c.symbol}` : c.name}</Text>
+                {c.symbol && c.exchange ? <Text style={s.chipEx}>{c.exchange}</Text> : null}
+              </View>
+            ))}
+            {sentiment && (
+              <View style={[s.badge, { borderColor: sentiment.color }]}>
+                <Ionicons name={sentiment.icon} size={14} color={sentiment.color} />
+                <Text style={[s.badgeText, { color: sentiment.color }]}>{sentiment.label}</Text>
+              </View>
+            )}
+            {relevance && (
+              <View style={[s.badge, { borderColor: t.border }]}>
+                <View style={s.dots}>
+                  {[1, 2, 3].map((d) => (
+                    <View key={d} style={[s.dot, { backgroundColor: d <= relevance.dots ? BRAND.lime : t.border }]} />
+                  ))}
                 </View>
-              )}
-              {relevance && (
-                <View style={[s.badge, { borderColor: t.border }]}>
-                  <View style={s.dots}>
-                    {[1, 2, 3].map((d) => (
-                      <View key={d} style={[s.dot, { backgroundColor: d <= relevance.dots ? BRAND.lime : t.border }]} />
-                    ))}
-                  </View>
-                  <Text style={[s.badgeText, { color: t.textMuted }]}>{relevance.label}</Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          <View style={{ flex: 1 }} />
-
+                <Text style={[s.badgeText, { color: t.textMuted }]}>{relevance.label}</Text>
+              </View>
+            )}
+          </View>
           <Text style={s.disclaimer}>
             {story.summaryStatus === 'ready' && story.summary ? 'AI-generated summary · ' : ''}Not investment advice
           </Text>
@@ -169,29 +189,31 @@ const styles = (t: Theme) =>
       borderWidth: t.isDark ? 1 : 0,
       borderColor: t.border,
     },
-    banner: { height: 150, padding: 16, justifyContent: 'space-between' },
+    banner: { height: 150, padding: 16, justifyContent: 'space-between', overflow: 'hidden' },
     bannerBgIcon: { position: 'absolute', right: -14, bottom: -24 },
     bannerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     catPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
     catText: { color: '#fff', fontWeight: '700', fontSize: 13, letterSpacing: 0.3 },
     region: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' },
+    regionPhoto: { backgroundColor: 'rgba(0,0,0,0.35)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, overflow: 'hidden' },
+    credit: { color: t.textMuted, fontSize: 10, paddingHorizontal: 18, paddingTop: 5, textAlign: 'right' },
     bannerBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-    source: { color: '#fff', fontSize: 15, fontWeight: '700', flexShrink: 1, marginRight: 8 },
+    source: { color: '#fff', fontSize: 15, fontWeight: '700', flexShrink: 1, marginRight: 8, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4 },
     time: { color: 'rgba(255,255,255,0.85)', fontSize: 13 },
-    body: { flex: 1, paddingHorizontal: 18, paddingTop: 16 },
-    title: { color: t.text, fontSize: 21, lineHeight: 28, fontWeight: '800', letterSpacing: -0.2 },
-    summary: { color: t.text, fontSize: 16.5, lineHeight: 25, marginTop: 12, opacity: 0.92 },
+    body: { flex: 1, paddingHorizontal: 18, paddingTop: 10, overflow: 'hidden' },
+    title: { color: t.text, fontSize: 20, lineHeight: 26, fontWeight: '800', letterSpacing: -0.2 },
+    summary: { color: t.text, fontSize: 16, lineHeight: 24, marginTop: 10, opacity: 0.92 },
     noSummary: { color: t.textMuted, fontSize: 15, lineHeight: 22, marginTop: 12, fontStyle: 'italic' },
-    chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16 },
-    chip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.chip, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+    meta: { paddingHorizontal: 18, paddingTop: 8 },
+    chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    chip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.chip, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, maxWidth: '60%' },
     chipText: { color: t.chipText, fontWeight: '700', fontSize: 13 },
     chipEx: { color: t.textMuted, fontSize: 10, fontWeight: '600' },
-    badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-    badge: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+    badge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20 },
     badgeText: { fontSize: 12.5, fontWeight: '600' },
     dots: { flexDirection: 'row', gap: 3 },
     dot: { width: 6, height: 6, borderRadius: 3 },
-    disclaimer: { color: t.textMuted, fontSize: 11.5, marginBottom: 10 },
+    disclaimer: { color: t.textMuted, fontSize: 11, marginTop: 8, marginBottom: 8 },
     footer: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingBottom: 14 },
     readMore: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: BRAND.navy, paddingVertical: 13, borderRadius: 14 },
     readMoreText: { color: '#fff', fontWeight: '700', fontSize: 15, flexShrink: 1 },

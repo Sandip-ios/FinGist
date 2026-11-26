@@ -1,3 +1,4 @@
+import { isImageTopic } from '../data/imageTopics';
 import { isKnownSymbol } from '../data/tickers';
 import {
   CATEGORIES, REGION_IMPACT, RELEVANCE, SENTIMENTS,
@@ -78,6 +79,7 @@ export function validateEnrichment(story: Story, raw: Record<string, unknown>): 
     regionImpact: pick<RegionImpact>(raw.region_impact, REGION_IMPACT, story.region === 'india' ? 'india' : 'global'),
     marketRelevant: raw.market_relevant !== false,
     companies,
+    imageTopic: isImageTopic(raw.image_topic) ? raw.image_topic : null,
     flags,
   };
 }

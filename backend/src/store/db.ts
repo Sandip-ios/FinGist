@@ -1,4 +1,6 @@
-import type { Enrichment, Story } from '../types';
+import { CATEGORY_DEFAULT_TOPIC, IMAGE_TOPIC_IDS, isImageTopic, type ImageTopic } from '../data/imageTopics';
+import { pickPhoto, type Photo } from '../enrich/pexels';
+import type { Category, Enrichment, Story } from '../types';
 
 export interface SourceState {
   source_id: string;
@@ -102,11 +104,11 @@ export async function saveEnrichment(db: D1Database, id: string, e: Enrichment, 
   await db
     .prepare(
       `UPDATE stories SET status = ?2, summary = ?3, category = ?4, sentiment = ?5, relevance = ?6, region_impact = ?7,
-         companies = ?8, flags = ?9, enriched_at = ?10, error = NULL WHERE id = ?1`,
+         companies = ?8, flags = ?9, enriched_at = ?10, image_topic = ?11, error = NULL WHERE id = ?1`,
     )
     .bind(
       id, e.marketRelevant ? 'ready' : 'rejected', e.summary, e.category, e.sentiment, e.relevance, e.regionImpact,
-      JSON.stringify(e.companies), JSON.stringify(e.flags), now,
+      JSON.stringify(e.companies), JSON.stringify(e.flags), now, e.imageTopic,
     )
     .run();
 }
@@ -135,7 +137,7 @@ export interface FeedQuery {
   limit: number;
 }
 
-export async function queryFeed(db: D1Database, q: FeedQuery) {
+export async function queryFeed(db: D1Database, q: FeedQuery, photos?: Map<string, Photo[]>) {
   const where = [`status IN ('ready', 'pending', 'processing', 'failed')`, `COALESCE(relevance, 'medium') != 'low'`];
   const binds: (string | number)[] = [];
   if (q.before) { binds.push(q.before); where.push(`published_at < ?${binds.length}`); }
@@ -144,7 +146,7 @@ export async function queryFeed(db: D1Database, q: FeedQuery) {
   binds.push(q.limit);
   const { results } = await db
     .prepare(
-      `SELECT id, source_name, url, title, summary, category, sentiment, relevance, region, region_impact, kind, companies, published_at, status
+      `SELECT id, source_name, url, title, summary, category, sentiment, relevance, region, region_impact, kind, companies, published_at, status, image_topic
        FROM stories WHERE ${where.join(' AND ')} ORDER BY published_at DESC LIMIT ?${binds.length}`,
     )
     .bind(...binds)
@@ -163,5 +165,43 @@ export async function queryFeed(db: D1Database, q: FeedQuery) {
     kind: r.kind,
     companies: r.companies ? JSON.parse(r.companies as string) : [],
     publishedAt: r.published_at,
+    image: photos ? imageFor(photos, r.id as string, r.image_topic as string | null, r.category as string | null) : null,
   }));
+}
+
+function imageFor(photos: Map<string, Photo[]>, id: string, topic: string | null, category: string | null) {
+  const t: ImageTopic = isImageTopic(topic) ? topic : CATEGORY_DEFAULT_TOPIC[(category ?? 'other') as Category] ?? 'business_meeting';
+  const p = pickPhoto(photos.get(t) ?? [], id);
+  return p ? { url: p.url, photographer: p.photographer, photographerUrl: p.photographerUrl, pexelsUrl: p.pexelsUrl, color: p.avgColor } : null;
+}
+
+// ---- Photo cache (Pexels) ----
+
+export async function getPhotoCache(db: D1Database): Promise<Map<string, Photo[]>> {
+  const { results } = await db.prepare('SELECT topic, photos FROM image_cache').all<{ topic: string; photos: string }>();
+  return new Map(results.map((r) => [r.topic, JSON.parse(r.photos) as Photo[]]));
+}
+
+/** Topics with no photos yet come first, then the oldest; failed topics wait 6 hours. */
+export async function topicsToRefresh(db: D1Database, now: number, maxAgeMs: number, limit: number): Promise<ImageTopic[]> {
+  const { results } = await db.prepare('SELECT topic, fetched_at, photos, last_error FROM image_cache').all<{ topic: string; fetched_at: number; photos: string; last_error: string | null }>();
+  const known = new Map(results.map((r) => [r.topic, r]));
+  const missing = IMAGE_TOPIC_IDS.filter((t) => !known.has(t));
+  const stale = results
+    .filter((r) => isImageTopic(r.topic))
+    .filter((r) => (r.last_error ? now - r.fetched_at > 6 * 3_600_000 : now - r.fetched_at > maxAgeMs))
+    .sort((a, b) => a.fetched_at - b.fetched_at)
+    .map((r) => r.topic as ImageTopic);
+  return [...missing, ...stale].slice(0, limit);
+}
+
+export async function savePhotos(db: D1Database, topic: string, photos: Photo[] | null, now: number, error?: string): Promise<void> {
+  if (photos && photos.length) {
+    await db.prepare(`INSERT INTO image_cache (topic, photos, fetched_at, last_error) VALUES (?1, ?2, ?3, NULL)
+      ON CONFLICT(topic) DO UPDATE SET photos = ?2, fetched_at = ?3, last_error = NULL`).bind(topic, JSON.stringify(photos), now).run();
+  } else {
+    // Keep old photos if we had some; just record the error/time.
+    await db.prepare(`INSERT INTO image_cache (topic, photos, fetched_at, last_error) VALUES (?1, '[]', ?2, ?3)
+      ON CONFLICT(topic) DO UPDATE SET fetched_at = ?2, last_error = ?3`).bind(topic, now, error ?? 'no photos').run();
+  }
 }

@@ -1,10 +1,12 @@
 import { SOURCES } from './config/sources';
 import { enrichBatch } from './enrich/enrich';
 import { RateLimitError, TransientError } from './enrich/gemini';
+import { searchPhotos } from './enrich/pexels';
+import { IMAGE_TOPICS } from './data/imageTopics';
 import { dedupeList, titleTokens } from './ingest/dedupe';
 import { collectSource } from './pipeline';
 import {
-  existingIds, getSourceStates, releaseLease, insertStories, leasePending, markFailed, queryFeed, recentTitles, saveEnrichment, saveSourceState,
+  existingIds, getPhotoCache, getSourceStates, releaseLease, savePhotos, topicsToRefresh, insertStories, leasePending, markFailed, queryFeed, recentTitles, saveEnrichment, saveSourceState,
 } from './store/db';
 import { CATEGORIES } from './types';
 
@@ -12,6 +14,8 @@ export interface Env {
   DB: D1Database;
   SELF?: Fetcher;
   GEMINI_API_KEY: string;
+  /** Optional: free key from pexels.com/api. Without it cards show the coloured banner only. */
+  PEXELS_API_KEY?: string;
   INTERNAL_KEY: string;
   GEMINI_MODEL: string;
   GEMINI_FALLBACK_MODEL?: string;
@@ -44,6 +48,7 @@ export default {
     const jobs = [
       ...due.map((s) => `/internal/ingest/${s.id}`),
       ...Array.from({ length: batches }, () => '/internal/enrich'),
+      ...(env.PEXELS_API_KEY ? ['/internal/images'] : []),
     ];
     console.log(`cron: ${due.length} feeds due, ${batches} AI batches`);
     ctx.waitUntil(
@@ -63,6 +68,7 @@ export default {
       if (!env.INTERNAL_KEY || req.headers.get('x-internal-key') !== env.INTERNAL_KEY) return json({ error: 'forbidden' }, 403);
       if (path.startsWith('/internal/ingest/')) return json(await ingestOne(env, path.slice('/internal/ingest/'.length)));
       if (path === '/internal/enrich') return json(await enrichOnce(env));
+      if (path === '/internal/images') return json(await refreshImages(env));
       return json({ error: 'not found' }, 404);
     }
 
@@ -73,12 +79,13 @@ export default {
       const category = url.searchParams.get('category');
       const before = Number(url.searchParams.get('before')) || undefined;
       const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 30, 1), 50);
+      const photos = await getPhotoCache(env.DB);
       const items = await queryFeed(env.DB, {
         region: region === 'india' || region === 'global' ? region : undefined,
         category: category && (CATEGORIES as readonly string[]).includes(category) ? category : undefined,
         before,
         limit,
-      });
+      }, photos);
       const last = items[items.length - 1];
       return json(
         { items, nextBefore: items.length === limit && last ? last.publishedAt : null },
@@ -116,7 +123,10 @@ async function runJob(env: Env, path: string): Promise<void> {
       console.error(`${path} via SELF failed: ${(e as Error).message}; running inline`);
     }
   }
-  const result = path === '/internal/enrich' ? await enrichOnce(env) : await ingestOne(env, path.slice('/internal/ingest/'.length));
+  const result =
+    path === '/internal/enrich' ? await enrichOnce(env)
+    : path === '/internal/images' ? await refreshImages(env)
+    : await ingestOne(env, path.slice('/internal/ingest/'.length));
   console.log(path, '(inline)', JSON.stringify(result).slice(0, 200));
 }
 
@@ -174,4 +184,23 @@ async function enrichOnce(env: Env) {
     else for (const l of leased) await markFailed(env.DB, l.story.id, String((e as Error).message), l.attempts);
     return { enriched: 0, error: String((e as Error).message) };
   }
+}
+
+/** Fills/refreshes the Pexels photo sets, a few topics per cron run (well within Pexels' free limits). */
+async function refreshImages(env: Env) {
+  if (!env.PEXELS_API_KEY) return { skipped: 'no PEXELS_API_KEY' };
+  const now = Date.now();
+  const topics = await topicsToRefresh(env.DB, now, 7 * 24 * 3_600_000, 3);
+  const done: Record<string, number | string> = {};
+  for (const topic of topics) {
+    try {
+      const photos = await searchPhotos(env.PEXELS_API_KEY, IMAGE_TOPICS[topic]);
+      await savePhotos(env.DB, topic, photos, now, photos.length ? undefined : 'no results');
+      done[topic] = photos.length;
+    } catch (e) {
+      await savePhotos(env.DB, topic, null, now, String((e as Error).message).slice(0, 300));
+      done[topic] = 'error';
+    }
+  }
+  return { refreshed: done };
 }
