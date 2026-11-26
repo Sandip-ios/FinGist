@@ -25,8 +25,10 @@ export function FilterBar(props: { region: RegionFilter; tab: number; onRegion: 
 
   // Keep the active chip in view when the user swipes between categories.
   useEffect(() => {
-    const p = positions.current[props.tab];
-    if (p) scroller.current?.scrollTo({ x: Math.max(0, p.x - 40), animated: true });
+    // Show the previous chip in full (or start at 0 for the first two tabs).
+    const prev = positions.current[props.tab - 1];
+    const x = props.tab <= 1 || !prev ? 0 : prev.x - 14;
+    scroller.current?.scrollTo({ x, animated: true });
   }, [props.tab]);
 
   return (

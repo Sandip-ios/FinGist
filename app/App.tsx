@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { FeedScreen } from './src/components/FeedScreen';
+import { BookmarksProvider } from './src/lib/bookmarks';
 import { useTheme } from './src/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -47,7 +48,9 @@ export default function App() {
       >
         <StatusBar style={t.isDark ? 'light' : 'dark'} />
         <SplashHider />
-        <FeedScreen />
+        <BookmarksProvider>
+          <FeedScreen />
+        </BookmarksProvider>
       </PersistQueryClientProvider>
     </SafeAreaProvider>
   );

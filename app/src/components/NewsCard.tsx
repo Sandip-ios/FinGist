@@ -5,19 +5,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import { memo, useEffect, useRef } from 'react';
 import { Animated, Pressable, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useBookmarks } from '../lib/bookmarks';
 import { timeAgo } from '../lib/time';
 import type { Story } from '../lib/types';
 import { BRAND, categoryMeta, RELEVANCE, SENTIMENT, useTheme, type Theme } from '../theme';
 
 interface Props {
   story: Story;
-  index: number;
-  total: number;
   /** Category pill on the photo; only needed in "Top stories" (category tabs already show it). */
   showCategory?: boolean;
 }
 
-function NewsCardImpl({ story, index, total, showCategory = true }: Props) {
+function NewsCardImpl({ story, showCategory = true }: Props) {
+  const bookmarks = useBookmarks();
+  const saved = bookmarks.isSaved(story.id);
   const t = useTheme();
   const cat = categoryMeta(story.category);
   const sentiment = story.sentiment ? SENTIMENT[story.sentiment] : null;
@@ -126,11 +127,14 @@ function NewsCardImpl({ story, index, total, showCategory = true }: Props) {
         </View>
 
         <View style={s.footer}>
-          <Pressable onPress={openArticle} style={({ pressed }) => [s.readMore, pressed && { opacity: 0.85 }]} accessibilityRole="link">
+          <Pressable onPress={openArticle} style={({ pressed }) => [s.readMore, pressed && { opacity: 0.85 }]} accessibilityRole="link" accessibilityLabel={`Read full story at ${story.source}`}>
             <Text style={s.readMoreText} numberOfLines={1}>
-              Read more at {story.source}
+              Read full story
             </Text>
             <Ionicons name="open-outline" size={16} color="#fff" />
+          </Pressable>
+          <Pressable onPress={() => bookmarks.toggle(story)} hitSlop={10} style={s.iconBtn} accessibilityLabel={saved ? 'Remove bookmark' : 'Bookmark story'}>
+            <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={21} color={saved ? (t.isDark ? BRAND.lime : BRAND.navy) : t.text} />
           </Pressable>
           <Pressable onPress={share} hitSlop={10} style={s.iconBtn} accessibilityLabel="Share story">
             <Ionicons name="share-social-outline" size={22} color={t.text} />
@@ -139,7 +143,7 @@ function NewsCardImpl({ story, index, total, showCategory = true }: Props) {
       </View>
       <View style={s.below}>
         <Text style={s.belowText} numberOfLines={1}>
-          {index + 1} / {total} · AI-generated summary · Not investment advice
+          AI-generated summary · Not investment advice
         </Text>
         {story.image && (
           <Pressable onPress={() => WebBrowser.openBrowserAsync(story.image!.photographerUrl).catch(() => {})} hitSlop={6} accessibilityRole="link">
@@ -216,7 +220,7 @@ const styles = (t: Theme) =>
     badgeText: { fontSize: 12.5, fontWeight: '600' },
     dots: { flexDirection: 'row', gap: 3 },
     dot: { width: 6, height: 6, borderRadius: 3 },
-    footer: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingBottom: 14 },
+    footer: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingBottom: 14 },
     readMore: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: BRAND.navy, paddingVertical: 13, borderRadius: 14 },
     readMoreText: { color: '#fff', fontWeight: '700', fontSize: 15, flexShrink: 1 },
     iconBtn: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: t.tabIdle },

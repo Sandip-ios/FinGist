@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { ActivityIndicator, Animated, FlatList, Platform, Pressable, RefreshControl, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { fetchFeed } from '../lib/api';
 import type { RegionFilter, Story } from '../lib/types';
 import { BRAND, useTheme } from '../theme';
@@ -11,12 +11,13 @@ import { NewsCard } from './NewsCard';
 const PAGE_SIZE = 30;
 
 /** One category's stories as full-height cards that snap one at a time; pull down on the first card to refresh. */
-export function CategoryFeed({ region, category, onFirstSwipe }: { region: RegionFilter; category: string | null; onFirstSwipe?: () => void }) {
+export function CategoryFeed({ region, category }: { region: RegionFilter; category: string | null }) {
   const t = useTheme();
   const [h, setH] = useState(0);
   const [index, setIndex] = useState(0);
   const [pulling, setPulling] = useState(false);
   const list = useRef<FlatList<Story>>(null);
+  const scrollY = useRef(new Animated.Value(0)).current;
   const topSeenId = useRef<string | null>(null);
 
   const query = useInfiniteQuery({
@@ -60,7 +61,6 @@ export function CategoryFeed({ region, category, onFirstSwipe }: { region: Regio
     if (i !== index) {
       setIndex(i);
       Haptics.selectionAsync().catch(() => {});
-      if (i > 0) onFirstSwipe?.();
     }
   };
 
@@ -87,16 +87,19 @@ export function CategoryFeed({ region, category, onFirstSwipe }: { region: Regio
         </View>
       )}
       {h > 0 && (
-        <FlatList
-          ref={list}
+        <Animated.FlatList
+          ref={list as unknown as React.Ref<FlatList<Story>>}
           data={items}
-          keyExtractor={(s) => s.id}
-          renderItem={({ item, index: i }) => (
-            <View style={{ height: h }}>
-              <NewsCard story={item} index={i} total={items.length} showCategory={category === null} />
-            </View>
+          keyExtractor={(s: Story) => s.id}
+          renderItem={({ item, index: i }: { item: Story; index: number }) => (
+            <StackedCard index={i} height={h} scrollY={scrollY}>
+              <NewsCard story={item} showCategory={category === null} />
+            </StackedCard>
           )}
-          getItemLayout={(_, i) => ({ length: h, offset: h * i, index: i })}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: Platform.OS !== 'web' })}
+          scrollEventThrottle={16}
+          removeClippedSubviews={false}
+          getItemLayout={(_: unknown, i: number) => ({ length: h, offset: h * i, index: i })}
           snapToInterval={h}
           snapToAlignment="start"
           decelerationRate="fast"
@@ -149,6 +152,19 @@ export function CategoryFeed({ region, category, onFirstSwipe }: { region: Regio
       )}
     </View>
   );
+}
+
+/**
+ * Inshorts-style stack: while the next card slides up over this one, this card stays in place,
+ * shrinks slightly and fades, so the new story appears to land on top of the old one.
+ */
+function StackedCard({ index, height, scrollY, children }: { index: number; height: number; scrollY: Animated.Value; children: React.ReactNode }) {
+  const start = index * height;
+  const range = [start - height, start, start + height];
+  const translateY = scrollY.interpolate({ inputRange: range, outputRange: [0, 0, height], extrapolate: 'clamp' });
+  const scale = scrollY.interpolate({ inputRange: range, outputRange: [1, 1, 0.9], extrapolate: 'clamp' });
+  const opacity = scrollY.interpolate({ inputRange: range, outputRange: [1, 1, 0.35], extrapolate: 'clamp' });
+  return <Animated.View style={{ height, opacity, transform: [{ translateY }, { scale }] }}>{children}</Animated.View>;
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
