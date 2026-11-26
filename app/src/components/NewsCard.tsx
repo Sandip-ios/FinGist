@@ -4,8 +4,9 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import { memo, useRef } from 'react';
-import { Animated, Pressable, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, Pressable, Share, StyleSheet, Text, useWindowDimensions, View, type HostInstance } from 'react-native';
 import { useBookmarks } from '../lib/bookmarks';
+import { useTour } from '../lib/tour';
 import { timeAgo } from '../lib/time';
 import type { Story } from '../lib/types';
 import { BRAND, categoryMeta, RELEVANCE, SENTIMENT, sourceColor, useTheme, type Theme } from '../theme';
@@ -14,9 +15,13 @@ interface Props {
   story: Story;
   /** Category label on the photo; only needed in "Top stories" (category tabs already show it). */
   showCategory?: boolean;
+  /** The first card of Top stories is used by the first-launch tour. */
+  tourAnchor?: boolean;
 }
 
-function NewsCardImpl({ story, showCategory = true }: Props) {
+function NewsCardImpl({ story, showCategory = true, tourAnchor = false }: Props) {
+  const tour = useTour();
+  const anchor = (id: 'card' | 'readMore' | 'actions') => (tourAnchor ? (r: HostInstance | null) => tour.register(id, r) : undefined);
   const t = useTheme();
   const s = styles(t);
   const bookmarks = useBookmarks();
@@ -56,7 +61,7 @@ function NewsCardImpl({ story, showCategory = true }: Props) {
 
   return (
     <View style={[s.page, { backgroundColor: t.bg }]}>
-      <View style={s.card}>
+      <View style={s.card} ref={anchor('card')} collapsable={false}>
         {/* Photo (or category colours) with labels on top */}
         <View style={[s.banner, { height: story.image ? photoH : 140 }]}>
           {story.image ? (
@@ -135,10 +140,11 @@ function NewsCardImpl({ story, showCategory = true }: Props) {
 
         {/* Actions */}
         <View style={s.footer}>
-          <Pressable onPress={openArticle} style={({ pressed }) => [s.readMore, pressed && { transform: [{ scale: 0.98 }], opacity: 0.92 }]} accessibilityRole="link" accessibilityLabel={`Read full story at ${story.source}`}>
+          <Pressable ref={anchor('readMore')} onPress={openArticle} style={({ pressed }) => [s.readMore, pressed && { transform: [{ scale: 0.98 }], opacity: 0.92 }]} accessibilityRole="link" accessibilityLabel={`Read full story at ${story.source}`}>
             <Text style={s.readMoreText} numberOfLines={1}>Read full story</Text>
             <Ionicons name="arrow-forward" size={18} color="#fff" />
           </Pressable>
+          <View ref={anchor('actions')} collapsable={false} style={s.actions}>
           <Pressable onPress={toggleBookmark} hitSlop={8} style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]} accessibilityLabel={saved ? 'Remove bookmark' : 'Bookmark story'}>
             <Animated.View style={{ transform: [{ scale: bookmarkScale }] }}>
               <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={21} color={saved ? (t.isDark ? BRAND.lime : BRAND.navy) : t.text} />
@@ -147,6 +153,7 @@ function NewsCardImpl({ story, showCategory = true }: Props) {
           <Pressable onPress={share} hitSlop={8} style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]} accessibilityLabel="Share story">
             <Ionicons name="share-social-outline" size={21} color={t.text} />
           </Pressable>
+          </View>
         </View>
       </View>
 
@@ -206,6 +213,7 @@ const styles = (t: Theme) =>
     footer: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 14 },
     readMore: { flex: 1, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: BRAND.navy, borderRadius: 25 },
     readMoreText: { color: '#fff', fontWeight: '700', fontSize: 15.5 },
+    actions: { flexDirection: 'row', gap: 10 },
     iconBtn: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: t.tabIdle },
     below: { alignItems: 'center', paddingTop: 5, gap: 1 },
     belowText: { color: t.textMuted, fontSize: 10.5, textAlign: 'center' },

@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBookmarks } from '../lib/bookmarks';
+import { useTourRef } from '../lib/tour';
 import type { RegionFilter } from '../lib/types';
 import { BRAND, useTheme } from '../theme';
 import { fetchStory } from '../lib/api';
@@ -11,6 +12,7 @@ import type { Story } from '../lib/types';
 import { AlertsPrompt } from './AlertsPrompt';
 import { MoreSheet } from './MoreSheet';
 import { StoryViewer } from './StoryViewer';
+import { TourOverlay } from './TourOverlay';
 import { CategoryFeed } from './CategoryFeed';
 import { FilterBar, TABS } from './FilterBar';
 import { Pager, type PagerHandle } from './Pager';
@@ -28,6 +30,9 @@ export function FeedScreen() {
   const [searchOpen, setSearchOpen] = useState(false);
   const pager = useRef<PagerHandle>(null);
   const { saved } = useBookmarks();
+  const searchRef = useTourRef('search');
+  const savedRef = useTourRef('saved');
+  const menuRef = useTourRef('menu');
 
   // Tapping a news alert opens that story.
   const openStory = useCallback((id: string) => {
@@ -50,10 +55,10 @@ export function FeedScreen() {
           <Text style={[s.date, { color: t.textMuted }]}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</Text>
         </View>
         <View style={s.headerIcons}>
-          <Pressable onPress={() => setSearchOpen(true)} hitSlop={10} accessibilityLabel="Search news">
+          <Pressable ref={searchRef} onPress={() => setSearchOpen(true)} hitSlop={10} accessibilityLabel="Search news">
             <Ionicons name="search" size={24} color={t.text} />
           </Pressable>
-          <Pressable onPress={() => setSavedOpen(true)} hitSlop={10} accessibilityLabel={`Saved stories (${saved.length})`}>
+          <Pressable ref={savedRef} onPress={() => setSavedOpen(true)} hitSlop={10} accessibilityLabel={`Saved stories (${saved.length})`}>
             <Ionicons name={saved.length ? 'bookmarks' : 'bookmarks-outline'} size={23} color={t.text} />
             {saved.length > 0 && (
               <View style={[s.badge, { backgroundColor: t.isDark ? BRAND.lime : BRAND.navy }]}>
@@ -61,7 +66,7 @@ export function FeedScreen() {
               </View>
             )}
           </Pressable>
-          <Pressable onPress={() => setMoreOpen(true)} hitSlop={10} accessibilityLabel="More: alerts, share, feedback, terms, privacy">
+          <Pressable ref={menuRef} onPress={() => setMoreOpen(true)} hitSlop={10} accessibilityLabel="More: alerts, share, feedback, terms, privacy">
             <Ionicons name="menu" size={27} color={t.text} />
           </Pressable>
         </View>
@@ -82,7 +87,8 @@ export function FeedScreen() {
 
       </View>
 
-      <MoreSheet visible={moreOpen} onClose={() => setMoreOpen(false)} />
+      <MoreSheet visible={moreOpen} onClose={() => setMoreOpen(false)} onShowTour={() => { setMoreOpen(false); selectTab(0); }} />
+      <TourOverlay />
       <StoryViewer stories={alertStory} start={0} title="Breaking news" onClose={() => setAlertStory(null)} />
       <SavedSheet visible={savedOpen} onClose={() => setSavedOpen(false)} />
       <SearchScreen visible={searchOpen} onClose={() => setSearchOpen(false)} onOpenTab={selectTab} />

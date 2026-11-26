@@ -4,6 +4,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { Alert, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAlerts } from '../lib/alerts';
+import { useTour } from '../lib/tour';
 import { config } from '../lib/config';
 import type { RegionFilter } from '../lib/types';
 import { BRAND, useTheme, type Theme } from '../theme';
@@ -17,7 +18,8 @@ function storeUrl(): string {
 }
 
 /** Settings and info: alerts, share/rate/feedback, legal pages, about. */
-export function MoreSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export function MoreSheet({ visible, onClose, onShowTour }: { visible: boolean; onClose: () => void; onShowTour: () => void }) {
+  const tour = useTour();
   const t = useTheme();
   const st = styles(t);
   const insets = useSafeAreaInsets();
@@ -129,6 +131,8 @@ export function MoreSheet({ visible, onClose }: { visible: boolean; onClose: () 
           <View>
             <Text style={st.section}>FinGist</Text>
             <View style={st.group}>
+              <Row icon="map" label="Show app tour" onPress={() => { onShowTour(); setTimeout(tour.start, 700); }} />
+              <View style={st.divider} />
               <Row icon="share-social" label="Share FinGist" onPress={shareApp} />
               <View style={st.divider} />
               <Row icon="star" label="Rate FinGist" onPress={rateApp} />

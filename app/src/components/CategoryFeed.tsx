@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, FlatList, Platform, Pressable, RefreshControl, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { fetchFeed } from '../lib/api';
+import { useTour } from '../lib/tour';
 import type { RegionFilter, Story } from '../lib/types';
 import { BRAND, useTheme } from '../theme';
 import { NewsCard } from './NewsCard';
@@ -19,6 +20,7 @@ export function CategoryFeed({ region, category }: { region: RegionFilter; categ
   const [pulling, setPulling] = useState(false);
   const list = useRef<FlatList<Story>>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
+  const tour = useTour();
   const topSeenId = useRef<string | null>(null);
   const currentId = useRef<string | null>(null);
 
@@ -54,6 +56,11 @@ export function CategoryFeed({ region, category }: { region: RegionFilter; categ
       currentId.current = items[target]?.id ?? null;
     }
   }, [items, h]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Start the first-launch tour once Top stories has a card on screen.
+  useEffect(() => {
+    if (category === null && h > 0 && items.length > 0) tour.startIfFirstTime();
+  }, [category, h, items.length, tour]);
 
   const newCount = topSeenId.current ? Math.max(0, items.findIndex((s) => s.id === topSeenId.current)) : 0;
 
@@ -114,7 +121,7 @@ export function CategoryFeed({ region, category }: { region: RegionFilter; categ
           keyExtractor={(s: Story) => s.id}
           renderItem={({ item, index: i }: { item: Story; index: number }) => (
             <StackedCard index={i} height={h} scrollY={scrollY} last={i === items.length - 1}>
-              <NewsCard story={item} showCategory={category === null} />
+              <NewsCard story={item} showCategory={category === null} tourAnchor={category === null && i === 0} />
             </StackedCard>
           )}
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: Platform.OS !== 'web' })}

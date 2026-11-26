@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import { useTourRef } from '../lib/tour';
 import type { RegionFilter } from '../lib/types';
 import { BRAND, CATEGORIES, useTheme } from '../theme';
 
@@ -27,6 +28,8 @@ export function FilterBar(props: { region: RegionFilter; tab: number; onRegion: 
   const [menu, setMenu] = useState(false);
   const accent = t.isDark ? BRAND.lime : BRAND.navy;
   const region = REGIONS.find((r) => r.id === props.region)!;
+  const regionRef = useTourRef('region');
+  const tabsRef = useTourRef('tabs');
 
   // Keep the previous tab fully visible (start at 0 for the first tabs).
   useEffect(() => {
@@ -38,6 +41,7 @@ export function FilterBar(props: { region: RegionFilter; tab: number; onRegion: 
   return (
     <View style={[s.bar, { borderBottomColor: t.border }]}>
       <Pressable
+        ref={regionRef}
         onPress={() => { tap(); setMenu(true); }}
         style={({ pressed }) => [s.regionBtn, { backgroundColor: t.isDark ? t.tabIdle : '#ffffff', borderColor: t.border }, pressed && { opacity: 0.8 }]}
         accessibilityLabel={`Region: ${region.label}. Change region`}
@@ -46,6 +50,7 @@ export function FilterBar(props: { region: RegionFilter; tab: number; onRegion: 
         <Ionicons name="chevron-down" size={14} color={t.textMuted} />
       </Pressable>
 
+      <View ref={tabsRef} collapsable={false} style={{ flex: 1 }}>
       <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabs}>
         {TABS.map((c, i) => {
           const active = props.tab === i;
@@ -64,6 +69,7 @@ export function FilterBar(props: { region: RegionFilter; tab: number; onRegion: 
           );
         })}
       </ScrollView>
+      </View>
 
       <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)}>
         <Pressable style={s.backdrop} onPress={() => setMenu(false)}>
