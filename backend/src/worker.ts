@@ -1,12 +1,12 @@
 import { SOURCES } from './config/sources';
 import { enrichBatch } from './enrich/enrich';
 import { RateLimitError, TransientError } from './enrich/gemini';
-import { searchPhotos } from './enrich/pexels';
+import { photoSourceFromEnv } from './enrich/photos';
 import { IMAGE_TOPICS } from './data/imageTopics';
 import { dedupeList, titleTokens } from './ingest/dedupe';
 import { collectSource } from './pipeline';
 import {
-  existingIds, getPhotoCache, getSourceStates, releaseLease, savePhotos, topicsToRefresh, insertStories, leasePending, markFailed, queryFeed, recentTitles, saveEnrichment, saveSourceState,
+  existingIds, getPhotoCache, getSourceStates, recentTopics, releaseLease, savePhotos, saveSourceState, topicsToRefresh, insertStories, leasePending, markFailed, queryFeed, recentTitles, saveEnrichment,
 } from './store/db';
 import { CATEGORIES } from './types';
 
@@ -14,8 +14,12 @@ export interface Env {
   DB: D1Database;
   SELF?: Fetcher;
   GEMINI_API_KEY: string;
-  /** Optional: free key from pexels.com/api. Without it cards show the coloured banner only. */
+  /** Optional photo keys (free). Without either, cards show the coloured banner only. */
+  UNSPLASH_ACCESS_KEY?: string;
   PEXELS_API_KEY?: string;
+  /** Minutes between photo refresh runs and topics per run (Unsplash demo keys allow 50 requests/hour). */
+  IMAGE_REFRESH_EVERY_MIN?: string;
+  IMAGE_TOPICS_PER_RUN?: string;
   INTERNAL_KEY: string;
   GEMINI_MODEL: string;
   GEMINI_FALLBACK_MODEL?: string;
@@ -48,7 +52,7 @@ export default {
     const jobs = [
       ...due.map((s) => `/internal/ingest/${s.id}`),
       ...Array.from({ length: batches }, () => '/internal/enrich'),
-      ...(env.PEXELS_API_KEY ? ['/internal/images'] : []),
+      ...(imagesDue(env, states, now) ? ['/internal/images'] : []),
     ];
     console.log(`cron: ${due.length} feeds due, ${batches} AI batches`);
     ctx.waitUntil(
@@ -186,21 +190,36 @@ async function enrichOnce(env: Env) {
   }
 }
 
-/** Fills/refreshes the Pexels photo sets, a few topics per cron run (well within Pexels' free limits). */
+const IMAGES_STATE_ID = '__images';
+
+function imagesDue(env: Env, states: Map<string, { last_fetch_at: number }>, now: number): boolean {
+  if (!photoSourceFromEnv(env)) return false;
+  const every = Number(env.IMAGE_REFRESH_EVERY_MIN) || (env.UNSPLASH_ACCESS_KEY ? 12 : 2);
+  const last = states.get(IMAGES_STATE_ID)?.last_fetch_at ?? 0;
+  return now - last >= every * 60_000 - 15_000;
+}
+
+/** Fills/refreshes the photo sets a few topics at a time, staying inside the free API limits. */
 async function refreshImages(env: Env) {
-  if (!env.PEXELS_API_KEY) return { skipped: 'no PEXELS_API_KEY' };
+  const source = photoSourceFromEnv(env);
+  if (!source) return { skipped: 'no UNSPLASH_ACCESS_KEY or PEXELS_API_KEY' };
   const now = Date.now();
-  const topics = await topicsToRefresh(env.DB, now, 7 * 24 * 3_600_000, 3);
+  const perRun = Number(env.IMAGE_TOPICS_PER_RUN) || (source.provider === 'unsplash' ? 1 : 3);
+  const priority = await recentTopics(env.DB, now - 48 * 3_600_000);
+  const topics = await topicsToRefresh(env.DB, now, 7 * 24 * 3_600_000, perRun, priority);
   const done: Record<string, number | string> = {};
+  let ok = true;
   for (const topic of topics) {
     try {
-      const photos = await searchPhotos(env.PEXELS_API_KEY, IMAGE_TOPICS[topic]);
+      const photos = await source.search(IMAGE_TOPICS[topic]);
       await savePhotos(env.DB, topic, photos, now, photos.length ? undefined : 'no results');
       done[topic] = photos.length;
     } catch (e) {
+      ok = false;
       await savePhotos(env.DB, topic, null, now, String((e as Error).message).slice(0, 300));
-      done[topic] = 'error';
+      done[topic] = String((e as Error).message).slice(0, 120);
     }
   }
-  return { refreshed: done };
+  await saveSourceState(env.DB, IMAGES_STATE_ID, now, { ok, error: ok ? undefined : 'see image_cache.last_error' });
+  return { provider: source.provider, refreshed: done };
 }

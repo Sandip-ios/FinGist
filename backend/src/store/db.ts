@@ -1,5 +1,5 @@
 import { CATEGORY_DEFAULT_TOPIC, IMAGE_TOPIC_IDS, isImageTopic, type ImageTopic } from '../data/imageTopics';
-import { pickPhoto, type Photo } from '../enrich/pexels';
+import { pickPhoto, type Photo } from '../enrich/photos';
 import type { Category, Enrichment, Story } from '../types';
 
 export interface SourceState {
@@ -172,10 +172,34 @@ export async function queryFeed(db: D1Database, q: FeedQuery, photos?: Map<strin
 function imageFor(photos: Map<string, Photo[]>, id: string, topic: string | null, category: string | null) {
   const t: ImageTopic = isImageTopic(topic) ? topic : CATEGORY_DEFAULT_TOPIC[(category ?? 'other') as Category] ?? 'business_meeting';
   const p = pickPhoto(photos.get(t) ?? [], id);
-  return p ? { url: p.url, photographer: p.photographer, photographerUrl: p.photographerUrl, pexelsUrl: p.pexelsUrl, color: p.avgColor } : null;
+  if (!p) return null;
+  const provider = p.provider ?? 'pexels';
+  return {
+    url: p.url,
+    photographer: p.photographer,
+    photographerUrl: p.photographerUrl,
+    pageUrl: p.pageUrl ?? p.pexelsUrl,
+    provider,
+    providerName: provider === 'unsplash' ? 'Unsplash' : 'Pexels',
+    color: p.avgColor,
+  };
 }
 
-// ---- Photo cache (Pexels) ----
+// ---- Photo cache (Unsplash / Pexels) ----
+
+/** Topics needed by recent stories (their AI topic, or their category's default). */
+export async function recentTopics(db: D1Database, since: number): Promise<Set<string>> {
+  const { results } = await db
+    .prepare(`SELECT DISTINCT image_topic, category FROM stories WHERE published_at > ?1 AND status = 'ready'`)
+    .bind(since)
+    .all<{ image_topic: string | null; category: string | null }>();
+  const out = new Set<string>();
+  for (const r of results) {
+    if (isImageTopic(r.image_topic)) out.add(r.image_topic);
+    else if (r.category) out.add(CATEGORY_DEFAULT_TOPIC[r.category as Category] ?? 'business_meeting');
+  }
+  return out;
+}
 
 export async function getPhotoCache(db: D1Database): Promise<Map<string, Photo[]>> {
   const { results } = await db.prepare('SELECT topic, photos FROM image_cache').all<{ topic: string; photos: string }>();
@@ -183,10 +207,11 @@ export async function getPhotoCache(db: D1Database): Promise<Map<string, Photo[]
 }
 
 /** Topics with no photos yet come first, then the oldest; failed topics wait 6 hours. */
-export async function topicsToRefresh(db: D1Database, now: number, maxAgeMs: number, limit: number): Promise<ImageTopic[]> {
+export async function topicsToRefresh(db: D1Database, now: number, maxAgeMs: number, limit: number, priority: Set<string> = new Set()): Promise<ImageTopic[]> {
   const { results } = await db.prepare('SELECT topic, fetched_at, photos, last_error FROM image_cache').all<{ topic: string; fetched_at: number; photos: string; last_error: string | null }>();
   const known = new Map(results.map((r) => [r.topic, r]));
-  const missing = IMAGE_TOPIC_IDS.filter((t) => !known.has(t));
+  // Topics used by today's stories first, so cards get photos quickly.
+  const missing = IMAGE_TOPIC_IDS.filter((t) => !known.has(t)).sort((a, b) => Number(priority.has(b)) - Number(priority.has(a)));
   const stale = results
     .filter((r) => isImageTopic(r.topic))
     .filter((r) => (r.last_error ? now - r.fetched_at > 6 * 3_600_000 : now - r.fetched_at > maxAgeMs))

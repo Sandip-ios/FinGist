@@ -24,7 +24,7 @@ export interface Story {
   kind: 'news' | 'filing' | 'regulator';
   companies: Company[];
   publishedAt: number;
-  /** Representative photo (Pexels, free licence) with credit; null = coloured banner. */
+  /** Representative photo (Unsplash/Pexels, free licence) with credit; null = coloured banner. */
   image?: StoryImage | null;
 }
 
@@ -32,7 +32,9 @@ export interface StoryImage {
   url: string;
   photographer: string;
   photographerUrl: string;
-  pexelsUrl: string;
+  pageUrl: string;
+  /** "Unsplash" or "Pexels" */
+  providerName: string;
   color: string | null;
 }
 

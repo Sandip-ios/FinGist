@@ -49,16 +49,20 @@ npx wrangler d1 create fingist          # copy the database_id into wrangler.tom
 npm run db:migrate:remote
 npx wrangler secret put GEMINI_API_KEY
 openssl rand -hex 32 | npx wrangler secret put INTERNAL_KEY
-npx wrangler secret put PEXELS_API_KEY  # optional: free key from https://www.pexels.com/api/ (card photos)
+npx wrangler secret put UNSPLASH_ACCESS_KEY  # optional: free key from https://unsplash.com/developers (card photos)
 npm run deploy
 ```
 Then open `https://fingist-api.<your-subdomain>.workers.dev/v1/feed`.
 
-## Card photos (Pexels)
+## Card photos (Unsplash or Pexels)
 The AI picks an illustration topic for each story (`src/data/imageTopics.ts`, e.g. gold, central_bank,
-technology_it). With `PEXELS_API_KEY` set, the cron fetches up to 15 free-licence Pexels photos per topic
-(3 topics per run, refreshed weekly) into the `image_cache` table, and `/v1/feed` returns one photo per story
-with the photographer credit. Without the key, cards show the coloured category banner.
+technology_it). With `UNSPLASH_ACCESS_KEY` (or `PEXELS_API_KEY`) set, the cron fetches free-licence photos per
+topic into the `image_cache` table (refreshed weekly), topics used by recent stories first, and `/v1/feed`
+returns one photo per story with the photographer credit. Without a key, cards show the coloured category banner.
+
+Unsplash demo keys allow 50 requests/hour, so by default one topic is fetched every 12 minutes (all ~60 topics
+in about 12 hours). After Unsplash approves Production access (5,000/hour), speed it up in `wrangler.toml`
+`[vars]`: `IMAGE_REFRESH_EVERY_MIN = "2"` and `IMAGE_TOPICS_PER_RUN = "3"`.
 
 ## Free-tier budget (approx.)
 - Workers: ~720 cron runs/day, ~15–20k requests/day (limit 100k). Each feed/AI batch runs as its own invocation to stay within per-invocation CPU limits.

@@ -78,9 +78,9 @@ function NewsCardImpl({ story, index, total }: Props) {
           </View>
         </View>
         {story.image && (
-          <Pressable onPress={() => WebBrowser.openBrowserAsync(story.image!.pexelsUrl).catch(() => {})} hitSlop={6} accessibilityRole="link">
+          <Pressable onPress={() => WebBrowser.openBrowserAsync(story.image!.photographerUrl).catch(() => {})} hitSlop={6} accessibilityRole="link">
             <Text style={s.credit} numberOfLines={1}>
-              Representative image · Photo: {story.image.photographer} / Pexels
+              Representative image · Photo: {story.image.photographer} / {story.image.providerName}
             </Text>
           </Pressable>
         )}
