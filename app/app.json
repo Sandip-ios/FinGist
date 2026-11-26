@@ -51,6 +51,9 @@
       "websiteUrl": "https://fingist.nrgroup.site",
       "privacyUrl": "https://fingist.nrgroup.site/privacy.html",
       "termsUrl": "https://fingist.nrgroup.site/terms.html",
+      "eas": {
+        "projectId": "464a8727-5cad-4240-8155-8bbb2da6a5c9"
+      },
       "supportEmail": "sandypatel8889@gmail.com",
       "iosAppStoreId": ""
     }
