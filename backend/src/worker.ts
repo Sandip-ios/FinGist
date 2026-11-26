@@ -2,11 +2,13 @@ import { SOURCES } from './config/sources';
 import { enrichBatch } from './enrich/enrich';
 import { RateLimitError, TransientError } from './enrich/gemini';
 import { photoSourceFromEnv } from './enrich/photos';
+import { deleteDevice, digestOnce, notifyOnce, upsertDevice } from './notify/notify';
+import { isExpoToken } from './notify/push';
 import { IMAGE_TOPICS } from './data/imageTopics';
 import { dedupeList, titleTokens } from './ingest/dedupe';
 import { collectSource } from './pipeline';
 import {
-  existingIds, getPhotoCache, searchStories, trendingCompanies, getSourceStates, recentTopics, releaseLease, savePhotos, saveSourceState, topicsToRefresh, insertStories, leasePending, markFailed, queryFeed, recentTitles, saveEnrichment,
+  existingIds, getPhotoCache, getStory, searchStories, trendingCompanies, getSourceStates, recentTopics, releaseLease, savePhotos, saveSourceState, topicsToRefresh, insertStories, leasePending, markFailed, queryFeed, recentTitles, saveEnrichment,
 } from './store/db';
 import { CATEGORIES } from './types';
 
@@ -20,6 +22,10 @@ export interface Env {
   /** Minutes between photo refresh runs and topics per run (Unsplash demo keys allow 50 requests/hour). */
   IMAGE_REFRESH_EVERY_MIN?: string;
   IMAGE_TOPICS_PER_RUN?: string;
+  /** News alerts: minimum minutes between alerts, alerts per phone per day, max story age (minutes). */
+  NOTIFY_MIN_GAP_MIN?: string;
+  NOTIFY_DAILY_CAP?: string;
+  NOTIFY_MAX_AGE_MIN?: string;
   INTERNAL_KEY: string;
   GEMINI_MODEL: string;
   GEMINI_FALLBACK_MODEL?: string;
@@ -53,6 +59,8 @@ export default {
       ...due.map((s) => `/internal/ingest/${s.id}`),
       ...Array.from({ length: batches }, () => '/internal/enrich'),
       ...(imagesDue(env, states, now) ? ['/internal/images'] : []),
+      '/internal/notify',
+      '/internal/digest',
     ];
     console.log(`cron: ${due.length} feeds due, ${batches} AI batches`);
     ctx.waitUntil(
@@ -73,6 +81,9 @@ export default {
       if (path.startsWith('/internal/ingest/')) return json(await ingestOne(env, path.slice('/internal/ingest/'.length)));
       if (path === '/internal/enrich') return json(await enrichOnce(env));
       if (path === '/internal/images') return json(await refreshImages(env));
+      if (path === '/internal/notify') return json(await notifyOnce(env.DB, notifyConfig(env)));
+      // ?at=<ms> lets the owner test a scheduled note outside its time window.
+      if (path === '/internal/digest') return json(await digestOnce(env.DB, geminiConfig(env), notifyConfig(env).dailyCap, Number(url.searchParams.get('at')) || Date.now()));
       return json({ error: 'not found' }, 404);
     }
 
@@ -106,6 +117,27 @@ export default {
       const items = await searchStories(env.DB, q, { before, limit }, photos);
       const last = items[items.length - 1];
       return json({ items, nextBefore: items.length === limit && last ? last.publishedAt : null }, 200, { 'cache-control': 'public, max-age=60' });
+    }
+
+    if (path.startsWith('/v1/story/') && req.method === 'GET') {
+      const id = path.slice('/v1/story/'.length);
+      if (!/^[a-f0-9]{32}$/.test(id)) return json({ error: 'not found' }, 404);
+      const story = await getStory(env.DB, id, await getPhotoCache(env.DB));
+      return story ? json(story, 200, { 'cache-control': 'public, max-age=300' }) : json({ error: 'not found' }, 404);
+    }
+
+    if (path === '/v1/devices' && (req.method === 'POST' || req.method === 'DELETE')) {
+      let body: Record<string, unknown>;
+      try { body = (await req.json()) as Record<string, unknown>; } catch { return json({ error: 'invalid JSON' }, 400); }
+      if (!isExpoToken(body.token)) return json({ error: 'invalid token' }, 400);
+      if (req.method === 'DELETE') { await deleteDevice(env.DB, body.token); return json({ ok: true }); }
+      const region = body.region === 'india' || body.region === 'global' ? body.region : 'all';
+      const platform = body.platform === 'android' ? 'android' : 'ios';
+      await upsertDevice(env.DB, {
+        token: body.token, platform, region, quietHours: body.quietHours !== false,
+        morning: body.morning !== false, marketOpen: body.marketOpen !== false, breaking: body.breaking !== false,
+      }, Date.now());
+      return json({ ok: true });
     }
 
     if (path === '/v1/trending' && req.method === 'GET') {
@@ -144,6 +176,8 @@ async function runJob(env: Env, path: string): Promise<void> {
   }
   const result =
     path === '/internal/enrich' ? await enrichOnce(env)
+    : path === '/internal/notify' ? await notifyOnce(env.DB, notifyConfig(env))
+    : path === '/internal/digest' ? await digestOnce(env.DB, geminiConfig(env), notifyConfig(env).dailyCap)
     : path === '/internal/images' ? await refreshImages(env)
     : await ingestOne(env, path.slice('/internal/ingest/'.length));
   console.log(path, '(inline)', JSON.stringify(result).slice(0, 200));
@@ -205,6 +239,18 @@ async function enrichOnce(env: Env) {
     else for (const l of leased) await markFailed(env.DB, l.story.id, String((e as Error).message), l.attempts);
     return { enriched: 0, error: String((e as Error).message) };
   }
+}
+
+function geminiConfig(env: Env) {
+  return { apiKey: env.GEMINI_API_KEY, model: env.GEMINI_FALLBACK_MODEL || env.GEMINI_MODEL };
+}
+
+function notifyConfig(env: Env) {
+  return {
+    minGapMinutes: Number(env.NOTIFY_MIN_GAP_MIN) || 30,
+    dailyCap: Number(env.NOTIFY_DAILY_CAP) || 8,
+    maxAgeMinutes: Number(env.NOTIFY_MAX_AGE_MIN) || 90,
+  };
 }
 
 const IMAGES_STATE_ID = '__images';

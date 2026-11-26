@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { FeedScreen } from './src/components/FeedScreen';
+import { AlertsProvider } from './src/lib/alerts';
 import { BookmarksProvider } from './src/lib/bookmarks';
 import { useTheme } from './src/theme';
 
@@ -49,7 +50,9 @@ export default function App() {
         <StatusBar style={t.isDark ? 'light' : 'dark'} />
         <SplashHider />
         <BookmarksProvider>
-          <FeedScreen />
+          <AlertsProvider>
+            <FeedScreen />
+          </AlertsProvider>
         </BookmarksProvider>
       </PersistQueryClientProvider>
     </SafeAreaProvider>

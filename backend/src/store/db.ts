@@ -176,6 +176,14 @@ function toCard(r: Record<string, unknown>, photos?: Map<string, Photo[]>) {
   };
 }
 
+export async function getStory(db: D1Database, id: string, photos?: Map<string, Photo[]>) {
+  const r = await db
+    .prepare(`SELECT ${CARD_COLUMNS} FROM stories s WHERE s.id = ?1 AND s.status = 'ready' AND s.summary IS NOT NULL`)
+    .bind(id)
+    .first<Record<string, unknown>>();
+  return r ? toCard(r, photos) : null;
+}
+
 /** Turns user text into a safe FTS5 query: every word must match, as a prefix ("infos" finds Infosys). */
 export function toFtsQuery(q: string): string | null {
   const words = q

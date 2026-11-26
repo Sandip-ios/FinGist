@@ -1,11 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBookmarks } from '../lib/bookmarks';
 import type { RegionFilter } from '../lib/types';
 import { BRAND, useTheme } from '../theme';
-import { AboutSheet } from './AboutSheet';
+import { fetchStory } from '../lib/api';
+import { useAlertTaps } from '../lib/alerts';
+import type { Story } from '../lib/types';
+import { AlertsPrompt } from './AlertsPrompt';
+import { MoreSheet } from './MoreSheet';
+import { StoryViewer } from './StoryViewer';
 import { CategoryFeed } from './CategoryFeed';
 import { FilterBar, TABS } from './FilterBar';
 import { Pager, type PagerHandle } from './Pager';
@@ -17,11 +22,18 @@ export function FeedScreen() {
   const insets = useSafeAreaInsets();
   const [region, setRegion] = useState<RegionFilter>('all');
   const [tab, setTab] = useState(0);
-  const [aboutOpen, setAboutOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [alertStory, setAlertStory] = useState<Story[] | null>(null);
   const [savedOpen, setSavedOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const pager = useRef<PagerHandle>(null);
   const { saved } = useBookmarks();
+
+  // Tapping a news alert opens that story.
+  const openStory = useCallback((id: string) => {
+    fetchStory(id).then((st) => { if (st) setAlertStory([st]); }).catch(() => {});
+  }, []);
+  useAlertTaps(openStory);
 
   const selectTab = (i: number) => {
     setTab(i);
@@ -49,8 +61,8 @@ export function FeedScreen() {
               </View>
             )}
           </Pressable>
-          <Pressable onPress={() => setAboutOpen(true)} hitSlop={10} accessibilityLabel="About FinGist">
-            <Ionicons name="information-circle-outline" size={26} color={t.text} />
+          <Pressable onPress={() => setMoreOpen(true)} hitSlop={10} accessibilityLabel="More: alerts, share, feedback, terms, privacy">
+            <Ionicons name="menu" size={27} color={t.text} />
           </Pressable>
         </View>
       </View>
@@ -66,10 +78,12 @@ export function FeedScreen() {
             </View>
           ))}
         </Pager>
+        <AlertsPrompt />
 
       </View>
 
-      <AboutSheet visible={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <MoreSheet visible={moreOpen} onClose={() => setMoreOpen(false)} />
+      <StoryViewer stories={alertStory} start={0} title="Breaking news" onClose={() => setAlertStory(null)} />
       <SavedSheet visible={savedOpen} onClose={() => setSavedOpen(false)} />
       <SearchScreen visible={searchOpen} onClose={() => setSearchOpen(false)} onOpenTab={selectTab} />
     </View>

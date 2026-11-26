@@ -37,10 +37,22 @@
           "backgroundColor": "#01208e"
         }
       ],
-      "expo-image"
+      "expo-image",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#01208e"
+        }
+      ]
     ],
     "extra": {
-      "apiUrl": "https://fingist-api.fingist-sandip.workers.dev"
+      "apiUrl": "https://fingist-api.fingist-sandip.workers.dev",
+      "websiteUrl": "https://fingist.nrgroup.site",
+      "privacyUrl": "https://fingist.nrgroup.site/privacy.html",
+      "termsUrl": "https://fingist.nrgroup.site/terms.html",
+      "supportEmail": "",
+      "iosAppStoreId": ""
     }
   }
 }
