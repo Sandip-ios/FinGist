@@ -39,4 +39,15 @@ npx expo export --platform ios --platform android   # bundles must build without
 ## Notes
 - Bundle ID / package: `com.sandippatel.fingist`. It cannot be changed after the first store upload,
   so change it in `app.json` now if you prefer another (for example a company domain).
-- Store builds will be made with EAS Build in Phase 5.
+- Builds are made with EAS Build (`eas.json`):
+  - `preview`: install directly on your phone (Android APK link; iPhone needs its device registered)
+  - `production`: App Store / Play Store builds (build numbers increase automatically)
+
+## Standalone builds (no Expo Go)
+```bash
+npx eas-cli@latest build -p ios --profile production      # then: npx eas-cli@latest submit -p ios  (TestFlight)
+npx eas-cli@latest build -p android --profile preview     # APK to install directly
+npx eas-cli@latest build -p android --profile production  # Play Store bundle (.aab)
+```
+Android push alerts need Firebase Cloud Messaging: add `google-services.json` (path in `android.googleServicesFile`)
+and upload the FCM V1 service-account key with `npx eas-cli@latest credentials`.
