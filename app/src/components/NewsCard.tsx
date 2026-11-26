@@ -13,9 +13,11 @@ interface Props {
   story: Story;
   index: number;
   total: number;
+  /** Category pill on the photo; only needed in "Top stories" (category tabs already show it). */
+  showCategory?: boolean;
 }
 
-function NewsCardImpl({ story, index, total }: Props) {
+function NewsCardImpl({ story, index, total, showCategory = true }: Props) {
   const t = useTheme();
   const cat = categoryMeta(story.category);
   const sentiment = story.sentiment ? SENTIMENT[story.sentiment] : null;
@@ -63,10 +65,14 @@ function NewsCardImpl({ story, index, total }: Props) {
             </LinearGradient>
           )}
           <View style={s.bannerTop}>
-            <View style={[s.catPill, story.image && { backgroundColor: cat.colors[0] }]}>
-              <Ionicons name={cat.icon} size={14} color="#fff" />
-              <Text style={s.catText}>{cat.label}</Text>
-            </View>
+            {showCategory ? (
+              <View style={[s.catPill, story.image && { backgroundColor: cat.colors[0] }]}>
+                <Ionicons name={cat.icon} size={14} color="#fff" />
+                <Text style={s.catText}>{cat.label}</Text>
+              </View>
+            ) : (
+              <View />
+            )}
             <Text style={[s.region, story.image && s.regionPhoto]}>{regionLabel}</Text>
           </View>
           <View style={s.bannerBottom}>
@@ -77,14 +83,6 @@ function NewsCardImpl({ story, index, total }: Props) {
             <Text style={s.time}>{timeAgo(story.publishedAt)}</Text>
           </View>
         </View>
-        {story.image && (
-          <Pressable onPress={() => WebBrowser.openBrowserAsync(story.image!.photographerUrl).catch(() => {})} hitSlop={6} accessibilityRole="link">
-            <Text style={s.credit} numberOfLines={1}>
-              Representative image · Photo: {story.image.photographer} / {story.image.providerName}
-            </Text>
-          </Pressable>
-        )}
-
         <View style={s.body}>
           <Text style={s.title} accessibilityRole="header" numberOfLines={5}>
             {story.title}
@@ -125,9 +123,6 @@ function NewsCardImpl({ story, index, total }: Props) {
               </View>
             )}
           </View>
-          <Text style={s.disclaimer}>
-            {story.summaryStatus === 'ready' && story.summary ? 'AI-generated summary · ' : ''}Not investment advice
-          </Text>
         </View>
 
         <View style={s.footer}>
@@ -142,9 +137,18 @@ function NewsCardImpl({ story, index, total }: Props) {
           </Pressable>
         </View>
       </View>
-      <Text style={s.counter}>
-        {index + 1} / {total}
-      </Text>
+      <View style={s.below}>
+        <Text style={s.belowText} numberOfLines={1}>
+          {index + 1} / {total} · AI-generated summary · Not investment advice
+        </Text>
+        {story.image && (
+          <Pressable onPress={() => WebBrowser.openBrowserAsync(story.image!.photographerUrl).catch(() => {})} hitSlop={6} accessibilityRole="link">
+            <Text style={s.belowText} numberOfLines={1}>
+              Representative image · Photo: {story.image.photographer} / {story.image.providerName}
+            </Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -196,7 +200,6 @@ const styles = (t: Theme) =>
     catText: { color: '#fff', fontWeight: '700', fontSize: 13, letterSpacing: 0.3 },
     region: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' },
     regionPhoto: { backgroundColor: 'rgba(0,0,0,0.35)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, overflow: 'hidden' },
-    credit: { color: t.textMuted, fontSize: 10, paddingHorizontal: 18, paddingTop: 5, textAlign: 'right' },
     bannerBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
     source: { color: '#fff', fontSize: 15, fontWeight: '700', flexShrink: 1, marginRight: 8, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4 },
     time: { color: 'rgba(255,255,255,0.85)', fontSize: 13 },
@@ -204,7 +207,7 @@ const styles = (t: Theme) =>
     title: { color: t.text, fontSize: 20, lineHeight: 26, fontWeight: '800', letterSpacing: -0.2 },
     summary: { color: t.text, fontSize: 16, lineHeight: 24, marginTop: 10, opacity: 0.92 },
     noSummary: { color: t.textMuted, fontSize: 15, lineHeight: 22, marginTop: 12, fontStyle: 'italic' },
-    meta: { paddingHorizontal: 18, paddingTop: 8 },
+    meta: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 12 },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
     chip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.chip, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, maxWidth: '60%' },
     chipText: { color: t.chipText, fontWeight: '700', fontSize: 13 },
@@ -213,10 +216,10 @@ const styles = (t: Theme) =>
     badgeText: { fontSize: 12.5, fontWeight: '600' },
     dots: { flexDirection: 'row', gap: 3 },
     dot: { width: 6, height: 6, borderRadius: 3 },
-    disclaimer: { color: t.textMuted, fontSize: 11, marginTop: 8, marginBottom: 8 },
     footer: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingBottom: 14 },
     readMore: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: BRAND.navy, paddingVertical: 13, borderRadius: 14 },
     readMoreText: { color: '#fff', fontWeight: '700', fontSize: 15, flexShrink: 1 },
     iconBtn: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: t.tabIdle },
-    counter: { textAlign: 'center', color: t.textMuted, fontSize: 11, marginTop: 4 },
+    below: { alignItems: 'center', paddingTop: 5, gap: 1 },
+    belowText: { color: t.textMuted, fontSize: 10.5, textAlign: 'center' },
   });

@@ -24,7 +24,7 @@ export interface PhotoSource {
 const UTM = 'utm_source=fingist&utm_medium=referral';
 const withUtm = (u: string) => `${u}${u.includes('?') ? '&' : '?'}${UTM}`;
 
-export function unsplashSource(accessKey: string, perPage = 8): PhotoSource {
+export function unsplashSource(accessKey: string, perPage = 6): PhotoSource {
   const headers = { authorization: `Client-ID ${accessKey}`, 'accept-version': 'v1' };
   return {
     provider: 'unsplash',

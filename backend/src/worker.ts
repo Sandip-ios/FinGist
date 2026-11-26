@@ -194,7 +194,7 @@ const IMAGES_STATE_ID = '__images';
 
 function imagesDue(env: Env, states: Map<string, { last_fetch_at: number }>, now: number): boolean {
   if (!photoSourceFromEnv(env)) return false;
-  const every = Number(env.IMAGE_REFRESH_EVERY_MIN) || (env.UNSPLASH_ACCESS_KEY ? 12 : 2);
+  const every = Number(env.IMAGE_REFRESH_EVERY_MIN) || (env.UNSPLASH_ACCESS_KEY ? 10 : 2);
   const last = states.get(IMAGES_STATE_ID)?.last_fetch_at ?? 0;
   return now - last >= every * 60_000 - 15_000;
 }

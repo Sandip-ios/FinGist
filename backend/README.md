@@ -60,8 +60,8 @@ technology_it). With `UNSPLASH_ACCESS_KEY` (or `PEXELS_API_KEY`) set, the cron f
 topic into the `image_cache` table (refreshed weekly), topics used by recent stories first, and `/v1/feed`
 returns one photo per story with the photographer credit. Without a key, cards show the coloured category banner.
 
-Unsplash demo keys allow 50 requests/hour, so by default one topic is fetched every 12 minutes (all ~60 topics
-in about 12 hours). After Unsplash approves Production access (5,000/hour), speed it up in `wrangler.toml`
+Unsplash demo keys allow 50 requests/hour, so by default one topic (6 photos + 6 usage pings = 7 requests) is fetched
+every 10 minutes (all ~60 topics in about 10 hours). Until a story's own topic has photos, it borrows a related one. After Unsplash approves Production access (5,000/hour), speed it up in `wrangler.toml`
 `[vars]`: `IMAGE_REFRESH_EVERY_MIN = "2"` and `IMAGE_TOPICS_PER_RUN = "3"`.
 
 ## Free-tier budget (approx.)

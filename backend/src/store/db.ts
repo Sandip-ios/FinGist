@@ -138,7 +138,8 @@ export interface FeedQuery {
 }
 
 export async function queryFeed(db: D1Database, q: FeedQuery, photos?: Map<string, Photo[]>) {
-  const where = [`status IN ('ready', 'pending', 'processing', 'failed')`, `COALESCE(relevance, 'medium') != 'low'`];
+  // Only complete cards: AI summary written and checked. New stories appear a few minutes after publication.
+  const where = [`status = 'ready'`, `summary IS NOT NULL`, `COALESCE(relevance, 'medium') != 'low'`];
   const binds: (string | number)[] = [];
   if (q.before) { binds.push(q.before); where.push(`published_at < ?${binds.length}`); }
   if (q.region) { binds.push(q.region); where.push(`(region = ?${binds.length} OR region_impact = ?${binds.length} OR region_impact = 'both')`); }
@@ -169,9 +170,23 @@ export async function queryFeed(db: D1Database, q: FeedQuery, photos?: Map<strin
   }));
 }
 
+const GENERIC_TOPICS: ImageTopic[] = ['stock_market', 'trading_screen', 'economy_growth', 'business_meeting'];
+
+/**
+ * Story's own topic first; while that topic has no photos yet, the category's default,
+ * then a generic market photo, then any topic that has photos. So every card gets a photo.
+ */
 function imageFor(photos: Map<string, Photo[]>, id: string, topic: string | null, category: string | null) {
-  const t: ImageTopic = isImageTopic(topic) ? topic : CATEGORY_DEFAULT_TOPIC[(category ?? 'other') as Category] ?? 'business_meeting';
-  const p = pickPhoto(photos.get(t) ?? [], id);
+  const chain: string[] = [];
+  if (isImageTopic(topic)) chain.push(topic);
+  chain.push(CATEGORY_DEFAULT_TOPIC[(category ?? 'other') as Category] ?? 'business_meeting', ...GENERIC_TOPICS);
+  let list: Photo[] | undefined;
+  for (const t of chain) {
+    const l = photos.get(t);
+    if (l && l.length) { list = l; break; }
+  }
+  if (!list) list = [...photos.values()].find((l) => l.length);
+  const p = pickPhoto(list ?? [], id);
   if (!p) return null;
   const provider = p.provider ?? 'pexels';
   return {
