@@ -206,8 +206,13 @@ export function MoreSheet({ visible, onClose, onShowTour, onDismiss }: { visible
                   <SettingRow {...rt} icon="flash" label="Breaking news" sub="Important stories during the day" right={<Toggle value={alerts.prefs.breaking} onChange={(v) => { void alerts.update({ breaking: v }); }} />} />
                   <View style={st.divider} />
                   <SettingRow {...rt} icon="moon" label="Quiet hours" sub="No alerts from 10 pm to 7 am" right={<Toggle value={alerts.prefs.quietHours} onChange={(v) => { void alerts.update({ quietHours: v }); }} />} />
-                  <View style={st.divider} />
-                  <SettingRow {...rt} icon="paper-plane" label={testing ? 'Sending test alert…' : 'Send test alert'} sub="Check that alerts reach this phone" onPress={testing ? undefined : sendTest} />
+                  {__DEV__ && (
+                    <>
+                      {/* Developer check only: never shown in Release / TestFlight / App Store builds. */}
+                      <View style={st.divider} />
+                      <SettingRow {...rt} icon="paper-plane" label={testing ? 'Sending test alert…' : 'Send test alert'} sub="Developer check: alerts reach this phone" onPress={testing ? undefined : sendTest} />
+                    </>
+                  )}
                 </>
               )}
             </View>
