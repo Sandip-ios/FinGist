@@ -4,6 +4,13 @@ compatibility_date = "2025-11-01"
 
 # Runs every 2 minutes. Each source also has its own poll interval (see src/config/sources.ts),
 # so official/regulator feeds are checked less often than fast news feeds.
+# The website (landing page, privacy policy, terms) is served by this same Worker:
+#   /  /privacy  /terms   (files from ../website; API paths such as /v1/feed are not affected)
+[assets]
+directory = "../website"
+html_handling = "auto-trailing-slash"
+not_found_handling = "none"
+
 [triggers]
 crons = ["*/2 * * * *"]
 

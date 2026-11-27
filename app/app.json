@@ -56,9 +56,9 @@
     ],
     "extra": {
       "apiUrl": "https://fingist-api.fingist-sandip.workers.dev",
-      "websiteUrl": "https://fingist.nrgroup.site",
-      "privacyUrl": "https://fingist.nrgroup.site/privacy.html",
-      "termsUrl": "https://fingist.nrgroup.site/terms.html",
+      "websiteUrl": "https://fingist-api.fingist-sandip.workers.dev",
+      "privacyUrl": "https://fingist-api.fingist-sandip.workers.dev/privacy",
+      "termsUrl": "https://fingist-api.fingist-sandip.workers.dev/terms",
       "eas": {
         "projectId": "464a8727-5cad-4240-8155-8bbb2da6a5c9"
       },
