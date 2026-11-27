@@ -5,10 +5,11 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { FeedScreen } from './src/components/FeedScreen';
+import { IntroSplash } from './src/components/IntroSplash';
 import { AlertsProvider } from './src/lib/alerts';
 import { BookmarksProvider } from './src/lib/bookmarks';
 import { TourProvider } from './src/lib/tour';
@@ -38,6 +39,7 @@ onlineManager.setOnline(true);
 
 export default function App() {
   const t = useTheme();
+  const [restored, setRestored] = useState(false);
   useEffect(() => {
     SystemUI.setBackgroundColorAsync(t.bg).catch(() => {});
   }, [t.bg]);
@@ -46,10 +48,10 @@ export default function App() {
       <PersistQueryClientProvider
         client={queryClient}
         persistOptions={{ persister, maxAge: DAY, buster: 'v1' }}
-        onSuccess={() => SplashScreen.hideAsync().catch(() => {})}
+        onSuccess={() => setRestored(true)}
+        onError={() => setRestored(true)}
       >
         <StatusBar style={t.isDark ? 'light' : 'dark'} />
-        <SplashHider />
         <BookmarksProvider>
           <AlertsProvider>
             <TourProvider>
@@ -57,16 +59,8 @@ export default function App() {
             </TourProvider>
           </AlertsProvider>
         </BookmarksProvider>
+        <IntroSplash ready={restored} />
       </PersistQueryClientProvider>
     </SafeAreaProvider>
   );
-}
-
-/** Hide the splash even if restoring the cache fails or takes long. */
-function SplashHider() {
-  useEffect(() => {
-    const id = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 1500);
-    return () => clearTimeout(id);
-  }, []);
-  return null;
 }

@@ -56,7 +56,8 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const startIfFirstTime = useCallback(() => {
     if (checked.current) return;
     checked.current = true;
-    AsyncStorage.getItem(KEY).then((v) => { if (!v) setTimeout(start, 600); }).catch(() => {});
+    // Wait until the intro splash has faded out.
+    AsyncStorage.getItem(KEY).then((v) => { if (!v) setTimeout(start, 2400); }).catch(() => {});
   }, [start]);
 
   const value = useMemo<Tour>(() => ({ active, step, register, target, startIfFirstTime, start, next, finish }), [active, step, register, target, startIfFirstTime, start, next, finish]);

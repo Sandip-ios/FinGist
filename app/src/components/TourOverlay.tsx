@@ -1,11 +1,25 @@
+import RNMaskedView from '@react-native-masked-view/masked-view';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { TOUR_STEPS, useTour } from '../lib/tour';
 import { BRAND, useTheme } from '../theme';
 
+// The library's class typings don't match this React version's JSX types; the component itself is fine.
+const MaskedView = RNMaskedView as unknown as React.ComponentType<{ style?: object; maskElement: React.ReactElement; children?: React.ReactNode }>;
+
 interface Rect { x: number; y: number; w: number; h: number }
+
+/** Whole screen minus a rounded hole (even-odd fill), so the cut-out matches the rounded outline. */
+function holePath(W: number, H: number, r: Rect | null, radius: number): string {
+  const screen = `M0 0H${W}V${H}H0Z`;
+  if (!r) return screen;
+  const k = Math.min(radius, r.w / 2, r.h / 2);
+  const { x, y, w, h } = r;
+  return `${screen} M${x + k} ${y}H${x + w - k}A${k} ${k} 0 0 1 ${x + w} ${y + k}V${y + h - k}A${k} ${k} 0 0 1 ${x + w - k} ${y + h}H${x + k}A${k} ${k} 0 0 1 ${x} ${y + h - k}V${y + k}A${k} ${k} 0 0 1 ${x + k} ${y}Z`;
+}
 
 /**
  * First-launch tour: everything is blurred and dimmed except the highlighted part,
@@ -64,10 +78,20 @@ export function TourOverlay() {
     else tipTop = Math.min(r.y + r.h * 0.5, H - TIP_H - 30);
   }
 
-  const Shade = ({ style }: { style: object }) => (
-    <View style={[styles.shadeBox, style]} pointerEvents="none">
-      {Platform.OS === 'ios' && <BlurView intensity={18} tint="dark" style={StyleSheet.absoluteFill} />}
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: Platform.OS === 'ios' ? 'rgba(6,11,24,0.45)' : 'rgba(6,11,24,0.72)' }]} />
+  const radius = step.radius ?? 16;
+  const path = holePath(W, H, rect, radius);
+  const dim = Platform.OS === 'ios' ? 'rgba(6,11,24,0.45)' : 'rgba(6,11,24,0.72)';
+  // Blur (iPhone) and dim layer, both with the same rounded hole.
+  const Shade = () => (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {Platform.OS === 'ios' && (
+        <MaskedView style={StyleSheet.absoluteFill} maskElement={<Svg width={W} height={H}><Path d={path} fill="#000" fillRule="evenodd" /></Svg>}>
+          <BlurView intensity={18} tint="dark" style={StyleSheet.absoluteFill} />
+        </MaskedView>
+      )}
+      <Svg width={W} height={H} style={StyleSheet.absoluteFill}>
+        <Path d={path} fill={dim} fillRule="evenodd" />
+      </Svg>
     </View>
   );
 
@@ -76,22 +100,17 @@ export function TourOverlay() {
       <Pressable style={StyleSheet.absoluteFill} onPress={() => { Haptics.selectionAsync().catch(() => {}); tour.next(); }} accessibilityLabel="Next tip">
         {r ? (
           <Animated.View style={[StyleSheet.absoluteFill, { opacity: fade }]} pointerEvents="none">
-            {/* Four blurred panels around the highlighted area */}
-            <Shade style={{ left: 0, top: 0, width: W, height: Math.max(0, r.y) }} />
-            <Shade style={{ left: 0, top: r.y + r.h, width: W, height: Math.max(0, H - r.y - r.h) }} />
-            <Shade style={{ left: 0, top: r.y, width: Math.max(0, r.x), height: r.h }} />
-            <Shade style={{ left: r.x + r.w, top: r.y, width: Math.max(0, W - r.x - r.w), height: r.h }} />
+            <Shade />
             <Animated.View
               style={{
                 position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h,
-                borderRadius: step.radius ?? 16, borderWidth: 2.5, borderColor: BRAND.lime,
+                borderRadius: radius, borderWidth: 2.5, borderColor: BRAND.lime,
                 opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }),
-                transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] }) }],
               }}
             />
           </Animated.View>
         ) : (
-          <Shade style={{ left: 0, top: 0, right: 0, bottom: 0 }} />
+          <Shade />
         )}
 
         <Animated.View style={[styles.tip, { top: tipTop, bottom: tipBottom, backgroundColor: t.card, opacity: fade }]}>
@@ -119,7 +138,6 @@ export function TourOverlay() {
 }
 
 const styles = StyleSheet.create({
-  shadeBox: { position: 'absolute', overflow: 'hidden' },
   tip: { position: 'absolute', left: 16, right: 16, borderRadius: 20, padding: 18, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 10 },
   title: { fontSize: 18, fontWeight: '800' },
   text: { fontSize: 15, lineHeight: 22, marginTop: 6 },
