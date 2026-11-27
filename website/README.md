@@ -10,6 +10,11 @@ Static pages for the store listings and the app's More screen:
 
 Before uploading, replace every `SUPPORT_EMAIL` with your support email address (all three pages), and the two `#` store links in `index.html` once the app is live.
 
-Upload all files (including `style.css` and `icon-256.png`) to the document root of the site in Plesk → File Manager.
+## Hosting
+**GitHub Pages (free, automatic):** every push that changes `website/` publishes it to
+`https://sandip-ios.github.io/FinGist/` (workflow `.github/workflows/website.yml`).
+One-time setup: GitHub → Settings → Pages → Source: **GitHub Actions**.
+
+**Or BigRock:** upload all files (including `style.css` and `icon-256.png`) to the document root in Plesk → File Manager.
 
 These pages describe how the app actually handles data today (no accounts, push token only when alerts are on, no analytics/ads). If you add features that collect more data, update `privacy.html`. Have them reviewed by a lawyer if possible.
