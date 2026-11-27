@@ -7,8 +7,8 @@ sentiment and relevance. "Read more" opens the original article.
 | Folder | What | Status |
 |---|---|---|
 | `backend/` | News pipeline + API (Cloudflare Workers + D1, Gemini) | Phase 1 |
-| `app/` | React Native (Expo) app for iOS and Android | Phase 2 |
-| `website/` | Landing page, privacy policy, terms, support (BigRock hosting) | Phase 4 |
+| `app/` | React Native (Expo) app for iOS and Android | Ready for testing |
+| `website/` | Landing page, privacy policy, terms (GitHub Pages or BigRock) | Ready |
 
 ## Roadmap
 1. **Pipeline**: sources, dedupe, AI summaries, quality report on real stories ← *current*
@@ -16,6 +16,10 @@ sentiment and relevance. "Read more" opens the original article.
 3. Watchlist, bookmarks, push notifications, report button
 4. Store readiness: website, privacy, store declarations, icons, screenshots
 5. Release: Play closed test + TestFlight, then store submission
+
+## Legal
+- [Privacy Policy](PRIVACY.md)
+- [Terms & Conditions](TERMS.md)
 
 ## Content and compliance rules (apply everywhere)
 - Show only the headline, our own short summary, the source name and a link. Never copy full articles.
