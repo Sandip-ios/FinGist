@@ -58,6 +58,11 @@ interface Alerts {
   setEnabled: (on: boolean) => Promise<boolean>;
   update: (p: Partial<Pick<AlertPrefs, 'region' | 'quietHours' | 'morning' | 'marketOpen' | 'breaking'>>) => Promise<void>;
   markPromptSeen: () => void;
+  /**
+   * First launch only: ask for notification permission and switch all alert types on if allowed.
+   * Resolves when the person has answered (or straight away on later launches).
+   */
+  firstRunPermission: () => Promise<void>;
 }
 
 const Ctx = createContext<Alerts | null>(null);
@@ -92,11 +97,14 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
 
   // Load saved settings, count app opens, and refresh the token on every start (tokens can change).
   useEffect(() => {
+    let done: () => void = () => {};
+    loaded.current = new Promise<void>((r) => { done = r; });
     AsyncStorage.getItem(KEY)
       .catch(() => null)
       .then(async (v) => {
         const saved: AlertPrefs = { ...DEFAULTS, ...(v ? (JSON.parse(v) as Partial<AlertPrefs>) : {}) };
         const p = change(() => ({ ...saved, opens: saved.opens + 1 }));
+        done();
         if (p.enabled) {
           try {
             const token = await getToken();
@@ -140,7 +148,23 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
 
   const markPromptSeen = useCallback(() => { change((prev) => ({ ...prev, promptSeen: true })); }, [change]);
 
-  const value = useMemo<Alerts>(() => ({ prefs: prefs ?? DEFAULTS, busy, error, setEnabled, update, markPromptSeen }), [prefs, busy, error, setEnabled, update, markPromptSeen]);
+  const loaded = useRef<Promise<void> | null>(null);
+  const firstRunPermission = useCallback(async () => {
+    await loaded.current;
+    const p = latest.current;
+    if (p.promptSeen || p.enabled) return;
+    // Alerts are on by default: one system question on first launch, then all types are on.
+    change((prev) => ({ ...prev, promptSeen: true }));
+    try {
+      const token = await getToken();
+      const next = change((prev) => ({ ...prev, enabled: true, token }));
+      await saveDevice({ token, platform: Platform.OS, ...devicePrefs(next) }).catch(() => {});
+    } catch {
+      // Not allowed (or no network): leave alerts off; they can be turned on in More.
+    }
+  }, [change]);
+
+  const value = useMemo<Alerts>(() => ({ prefs: prefs ?? DEFAULTS, busy, error, setEnabled, update, markPromptSeen, firstRunPermission }), [prefs, busy, error, setEnabled, update, markPromptSeen, firstRunPermission]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

@@ -8,9 +8,8 @@ import { useTour, useTourRef } from '../lib/tour';
 import type { RegionFilter } from '../lib/types';
 import { BRAND, useTheme } from '../theme';
 import { fetchStory } from '../lib/api';
-import { useAlertTaps } from '../lib/alerts';
+import { useAlerts, useAlertTaps } from '../lib/alerts';
 import type { Story } from '../lib/types';
-import { AlertsPrompt } from './AlertsPrompt';
 import { MoreSheet } from './MoreSheet';
 import { StoryViewer } from './StoryViewer';
 import { TourOverlay } from './TourOverlay';
@@ -54,6 +53,14 @@ export function FeedScreen() {
     return () => sub.remove();
   }, []);
   const tour = useTour();
+  const alerts = useAlerts();
+  // First launch: after the intro, ask for notification permission, then start the app tour.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      alerts.firstRunPermission().finally(() => tour.allowFirstRun());
+    }, 2200);
+    return () => clearTimeout(id);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const tourPending = useRef(false);
   const searchRef = useTourRef('search');
   const savedRef = useTourRef('saved');
@@ -109,7 +116,6 @@ export function FeedScreen() {
             </View>
           ))}
         </Pager>
-        <AlertsPrompt />
 
       </View>
 

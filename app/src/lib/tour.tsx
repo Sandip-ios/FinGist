@@ -35,6 +35,8 @@ interface Tour {
   register: (id: TourTargetId, ref: View | null) => void;
   target: (id: TourTargetId) => View | null;
   startIfFirstTime: () => void;
+  /** The first-launch tour waits until this is called (after the notification question). */
+  allowFirstRun: () => void;
   start: () => void;
   next: () => void;
   finish: () => void;
@@ -47,6 +49,13 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const [active, setActive] = useState(false);
   const [step, setStep] = useState(0);
   const checked = useRef(false);
+  const gate = useRef<{ promise: Promise<void>; open: () => void } | null>(null);
+  if (!gate.current) {
+    let open: () => void = () => {};
+    const promise = new Promise<void>((r) => { open = r; });
+    gate.current = { promise, open };
+  }
+  const allowFirstRun = useCallback(() => gate.current?.open(), []);
 
   const register = useCallback((id: TourTargetId, ref: View | null) => { if (ref) refs.current.set(id, ref); }, []);
   const target = useCallback((id: TourTargetId) => refs.current.get(id) ?? null, []);
@@ -56,11 +65,13 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const startIfFirstTime = useCallback(() => {
     if (checked.current) return;
     checked.current = true;
-    // Wait until the intro splash has faded out.
-    AsyncStorage.getItem(KEY).then((v) => { if (!v) setTimeout(start, 2400); }).catch(() => {});
+    // Wait until the intro has finished and the notification question was answered.
+    Promise.all([AsyncStorage.getItem(KEY), gate.current!.promise])
+      .then(([v]) => { if (!v) setTimeout(start, 500); })
+      .catch(() => {});
   }, [start]);
 
-  const value = useMemo<Tour>(() => ({ active, step, register, target, startIfFirstTime, start, next, finish }), [active, step, register, target, startIfFirstTime, start, next, finish]);
+  const value = useMemo<Tour>(() => ({ active, step, register, target, startIfFirstTime, allowFirstRun, start, next, finish }), [active, step, register, target, startIfFirstTime, allowFirstRun, start, next, finish]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
