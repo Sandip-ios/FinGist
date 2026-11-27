@@ -3,12 +3,13 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
-import { memo, useRef } from 'react';
-import { Animated, Pressable, Share, StyleSheet, Text, useWindowDimensions, View, type HostInstance } from 'react-native';
+import { memo, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View, type HostInstance } from 'react-native';
 import { useBookmarks } from '../lib/bookmarks';
 import { useOpenSearch } from '../lib/openSearch';
 import { useTour } from '../lib/tour';
 import { timeAgo } from '../lib/time';
+import { ShareSheet } from './ShareSheet';
 import type { Story } from '../lib/types';
 import { BRAND, categoryMeta, RELEVANCE, SENTIMENT, sourceColor, useTheme, type Theme } from '../theme';
 
@@ -45,10 +46,12 @@ function NewsCardImpl({ story, showCategory = true, tourAnchor = false }: Props)
     }).catch(() => {});
   };
 
+  const [shareOpen, setShareOpen] = useState(false);
   const share = () => {
-    const text = story.summary ? `${story.title}\n\n${story.summary}` : story.title;
-    Share.share({ message: `${text}\n\nRead more: ${story.url}\n\nvia FinGist` }).catch(() => {});
+    Haptics.selectionAsync().catch(() => {});
+    setShareOpen(true);
   };
+
 
   const toggleBookmark = () => {
     Animated.sequence([
@@ -166,6 +169,7 @@ function NewsCardImpl({ story, showCategory = true, tourAnchor = false }: Props)
         </View>
       </View>
 
+      {shareOpen && <ShareSheet story={story} onClose={() => setShareOpen(false)} />}
       <View style={s.below}>
         <Text style={s.belowText} numberOfLines={1}>AI-generated summary · Not investment advice</Text>
         {story.image && (

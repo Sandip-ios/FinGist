@@ -4,6 +4,7 @@ import { RateLimitError, TransientError } from './enrich/gemini';
 import { photoSourceFromEnv } from './enrich/photos';
 import { deleteDevice, digestOnce, notifyOnce, upsertDevice } from './notify/notify';
 import { isExpoToken, sendTestPush } from './notify/push';
+import { storyPage, type SharedStory } from './share/page';
 import { IMAGE_TOPICS } from './data/imageTopics';
 import { dedupeList, titleTokens } from './ingest/dedupe';
 import { collectSource } from './pipeline';
@@ -117,6 +118,16 @@ export default {
       const items = await searchStories(env.DB, q, { before, limit }, photos);
       const last = items[items.length - 1];
       return json({ items, nextBefore: items.length === limit && last ? last.publishedAt : null }, 200, { 'cache-control': 'public, max-age=60' });
+    }
+
+    // Shared story page: /s/<id> (rich link previews + "Read full story" + "Get the app").
+    if (path.startsWith('/s/') && req.method === 'GET') {
+      const id = path.slice(3).toLowerCase();
+      const story = /^[a-f0-9]{32}$/.test(id) ? await getStory(env.DB, id, await getPhotoCache(env.DB)) : null;
+      if (!story) return Response.redirect(`${url.origin}/`, 302);
+      return new Response(storyPage(story as unknown as SharedStory, `${url.origin}/s/${id}`, url.origin), {
+        headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=600' },
+      });
     }
 
     if (path.startsWith('/v1/story/') && req.method === 'GET') {
