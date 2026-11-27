@@ -3,13 +3,13 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
-import { memo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View, type HostInstance } from 'react-native';
+import { memo, useRef } from 'react';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, useWindowDimensions, View, type HostInstance } from 'react-native';
 import { useBookmarks } from '../lib/bookmarks';
 import { useOpenSearch } from '../lib/openSearch';
 import { useTour } from '../lib/tour';
 import { timeAgo } from '../lib/time';
-import { ShareSheet } from './ShareSheet';
+import { useShareStory } from '../lib/shareStory';
 import type { Story } from '../lib/types';
 import { BRAND, categoryMeta, RELEVANCE, SENTIMENT, sourceColor, useTheme, type Theme } from '../theme';
 
@@ -46,10 +46,10 @@ function NewsCardImpl({ story, showCategory = true, tourAnchor = false }: Props)
     }).catch(() => {});
   };
 
-  const [shareOpen, setShareOpen] = useState(false);
+  const sharing = useShareStory(story);
   const share = () => {
     Haptics.selectionAsync().catch(() => {});
-    setShareOpen(true);
+    void sharing.share();
   };
 
 
@@ -66,6 +66,7 @@ function NewsCardImpl({ story, showCategory = true, tourAnchor = false }: Props)
 
   return (
     <View style={[s.page, { backgroundColor: t.bg }]}>
+      {sharing.hiddenImage}
       <View style={s.card} ref={anchor('card')} collapsable={false}>
         {/* Photo (or category colours) with labels on top */}
         <View style={[s.banner, { height: story.image ? photoH : 140 }]}>
@@ -163,13 +164,12 @@ function NewsCardImpl({ story, showCategory = true, tourAnchor = false }: Props)
             </Animated.View>
           </Pressable>
           <Pressable onPress={share} hitSlop={8} style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]} accessibilityLabel="Share story">
-            <Ionicons name="share-social-outline" size={21} color={t.text} />
+            {sharing.busy ? <ActivityIndicator color={t.text} /> : <Ionicons name="share-social-outline" size={21} color={t.text} />}
           </Pressable>
           </View>
         </View>
       </View>
 
-      {shareOpen && <ShareSheet story={story} onClose={() => setShareOpen(false)} />}
       <View style={s.below}>
         <Text style={s.belowText} numberOfLines={1}>Summary by FinGist · Source: {story.source} · Not investment advice</Text>
         {story.image && (
