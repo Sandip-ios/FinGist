@@ -24,6 +24,12 @@ function testAlertHelp(error?: string, message?: string): string {
       return 'The server needs the latest update. In the backend folder run: npm run deploy';
     case 'TooSoon':
       return 'Please wait a minute before sending another test.';
+    case 'TokenTimeout':
+      return 'iPhone did not give FinGist a push token. This usually means the installed build is missing the Push Notifications capability. In Xcode open ios/FinGist.xcworkspace → FinGist target → Signing & Capabilities, check "Push Notifications" is listed (add it with + Capability if not), then run the app on your phone again. Also check the phone has internet.';
+    case 'ServerTimeout':
+      return 'The FinGist server did not answer in time. Check your internet, then make sure the server is deployed (npm run deploy in backend) and try again.';
+    case 'Network':
+      return `Could not reach the FinGist server${message ? ` (${message})` : ''}. Check your internet and try again.`;
     case 'Phone':
       return message ?? 'Notifications are not allowed for FinGist. Allow them in iPhone Settings → FinGist → Notifications.';
     default:

@@ -26,6 +26,14 @@ export interface AlertPrefs {
 
 const DEFAULTS: AlertPrefs = { enabled: false, region: 'all', quietHours: true, morning: true, marketOpen: true, breaking: true, token: null, promptSeen: false, opens: 0 };
 
+/** Rejects with `message` if `work` takes longer than `ms`, so a stuck step can't hang the app. */
+function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(message)), ms);
+    work.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
+}
+
 const devicePrefs = (p: AlertPrefs) => ({ region: p.region, quietHours: p.quietHours, morning: p.morning, marketOpen: p.marketOpen, breaking: p.breaking });
 
 // Show alerts as banners even while the app is open.
@@ -151,13 +159,21 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
   const markPromptSeen = useCallback(() => { change((prev) => ({ ...prev, promptSeen: true })); }, [change]);
 
   const test = useCallback(async (): Promise<TestAlertResult> => {
+    let token: string;
     try {
-      const token = await getToken();
-      const p = change((prev) => ({ ...prev, enabled: true, token }));
-      await saveDevice({ token, platform: Platform.OS, ...devicePrefs(p) });
-      return await sendTestAlert(token);
+      token = await withTimeout(getToken(), 20_000, 'TokenTimeout');
     } catch (e) {
-      return { ok: false, stage: 'phone', error: 'Phone', message: (e as Error).message };
+      const msg = (e as Error).message;
+      if (msg === 'TokenTimeout') return { ok: false, stage: 'phone', error: 'TokenTimeout' };
+      return { ok: false, stage: 'phone', error: 'Phone', message: msg };
+    }
+    try {
+      const p = change((prev) => ({ ...prev, enabled: true, token }));
+      await withTimeout(saveDevice({ token, platform: Platform.OS, ...devicePrefs(p) }), 20_000, 'ServerTimeout');
+      return await withTimeout(sendTestAlert(token), 30_000, 'ServerTimeout');
+    } catch (e) {
+      const msg = (e as Error).message;
+      return { ok: false, stage: 'server', error: msg === 'ServerTimeout' ? 'ServerTimeout' : 'Network', message: msg };
     }
   }, [change]);
 
