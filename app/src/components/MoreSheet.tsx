@@ -3,10 +3,33 @@ import * as StoreReview from 'expo-store-review';
 import * as WebBrowser from 'expo-web-browser';
 import { Alert, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { useAlerts } from '../lib/alerts';
+import { clearAppCache } from '../lib/cache';
 import { config } from '../lib/config';
 import type { RegionFilter } from '../lib/types';
-import { BRAND, useTheme, type Theme } from '../theme';
+import { BRAND, useTheme, useThemeMode, type Theme, type ThemeMode } from '../theme';
+
+/** Plain-language explanation of a failed test alert, with what to do. */
+function testAlertHelp(error?: string, message?: string): string {
+  switch (error) {
+    case 'InvalidCredentials':
+      return 'Apple has not got this app\'s push key yet. On your Mac, in the app folder, run:\n\nnpx eas-cli@latest credentials -p ios\n\nChoose production → Push Notifications → set up a new key. Then tap Send test alert again.';
+    case 'DeviceNotRegistered':
+      return 'This phone\'s alert registration has expired. Turn News alerts off and on, then try again.';
+    case 'NotRegistered':
+      return 'The server does not know this phone yet. Make sure the latest server is deployed (npm run deploy in backend), then try again.';
+    case 'OldServer':
+      return 'The server needs the latest update. In the backend folder run: npm run deploy';
+    case 'TooSoon':
+      return 'Please wait a minute before sending another test.';
+    case 'Phone':
+      return message ?? 'Notifications are not allowed for FinGist. Allow them in iPhone Settings → FinGist → Notifications.';
+    default:
+      return `${error ?? 'Unknown error'}${message ? `: ${message}` : ''}`;
+  }
+}
 
 const MORNING_SUB: Record<RegionFilter, string> = {
   india: 'Weekdays about 8:45 am, before NSE/BSE open',
@@ -46,7 +69,9 @@ function SettingRow({ icon, label, sub, onPress, right, t, st, accent }: RowProp
 }
 
 function Toggle({ value, onChange, disabled }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return <Switch value={value} disabled={disabled} onValueChange={onChange} trackColor={{ true: BRAND.navy }} />;
+  const t = useTheme();
+  // Lime in Night mode: navy would be hard to see on the dark background.
+  return <Switch value={value} disabled={disabled} onValueChange={onChange} trackColor={{ true: t.isDark ? '#5fa80f' : BRAND.navy }} />;
 }
 
 const SOURCES = 'Economic Times, Mint, BusinessLine, CNBC-TV18, MarketWatch, Reserve Bank of India, SEBI, US Federal Reserve';
@@ -63,6 +88,34 @@ export function MoreSheet({ visible, onClose, onShowTour, onDismiss }: { visible
   const st = styles(t);
   const insets = useSafeAreaInsets();
   const alerts = useAlerts();
+  const queryClient = useQueryClient();
+  const { mode, setMode } = useThemeMode();
+  const [testing, setTesting] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  const sendTest = async () => {
+    setTesting(true);
+    const r = await alerts.test();
+    setTesting(false);
+    if (r.ok) Alert.alert('Test alert sent', 'You should see "FinGist alerts are working" within a few seconds. If nothing arrives, check iPhone Settings → FinGist → Notifications, and Focus / Do Not Disturb.');
+    else Alert.alert('Alert could not be delivered', testAlertHelp(r.error, r.message));
+  };
+
+  const clearCache = () => {
+    Alert.alert('Clear cache?', 'Removes downloaded photos and saved news, then loads fresh news. Your bookmarks and settings are kept.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: async () => {
+          setClearing(true);
+          await clearAppCache(queryClient);
+          setClearing(false);
+          Alert.alert('Cache cleared', 'Fresh news is loading.');
+        },
+      },
+    ]);
+  };
   const accent = t.isDark ? BRAND.lime : BRAND.navy;
 
   const shareApp = () => {
@@ -147,12 +200,43 @@ export function MoreSheet({ visible, onClose, onShowTour, onDismiss }: { visible
                   <SettingRow {...rt} icon="flash" label="Breaking news" sub="Important stories during the day" right={<Toggle value={alerts.prefs.breaking} onChange={(v) => { void alerts.update({ breaking: v }); }} />} />
                   <View style={st.divider} />
                   <SettingRow {...rt} icon="moon" label="Quiet hours" sub="No alerts from 10 pm to 7 am" right={<Toggle value={alerts.prefs.quietHours} onChange={(v) => { void alerts.update({ quietHours: v }); }} />} />
+                  <View style={st.divider} />
+                  <SettingRow {...rt} icon="paper-plane" label={testing ? 'Sending test alert…' : 'Send test alert'} sub="Check that alerts reach this phone" onPress={testing ? undefined : sendTest} />
                 </>
               )}
             </View>
             <Text style={st.note}>
               {alerts.error ?? 'All alerts follow your All / India / Global choice. At most 8 a day; turn off any type at any time.'}
             </Text>
+          </View>
+
+          <View>
+            <Text style={st.section}>Appearance</Text>
+            <View style={st.group}>
+              <View style={st.row}>
+                <View style={[st.rowIcon, { backgroundColor: t.chip }]}><Ionicons name={t.isDark ? 'moon' : 'sunny'} size={17} color={accent} /></View>
+                <Text style={[st.rowLabel, { flex: 1 }]}>Theme</Text>
+                <View style={st.segment}>
+                  {(['system', 'light', 'dark'] as ThemeMode[]).map((m) => {
+                    const active = mode === m;
+                    return (
+                      <Pressable key={m} onPress={() => setMode(m)} style={[st.segItem, active && { backgroundColor: accent }]} accessibilityRole="button" accessibilityState={{ selected: active }}>
+                        <Text style={[st.segText, { color: active ? (t.isDark ? '#0b1222' : '#fff') : t.textMuted }]}>{m === 'system' ? 'Auto' : m === 'light' ? 'Light' : 'Night'}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+            <Text style={st.note}>Auto follows your phone's Light or Dark setting.</Text>
+          </View>
+
+          <View>
+            <Text style={st.section}>Storage</Text>
+            <View style={st.group}>
+              <SettingRow {...rt} icon="trash" label={clearing ? 'Clearing…' : 'Clear cache'} sub="Photos and saved news. Bookmarks and settings are kept." onPress={clearing ? undefined : clearCache} />
+            </View>
+            <Text style={st.note}>Photos are also cleaned up automatically every week.</Text>
           </View>
 
           <View>

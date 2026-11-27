@@ -13,7 +13,11 @@ import { IntroSplash } from './src/components/IntroSplash';
 import { AlertsProvider } from './src/lib/alerts';
 import { BookmarksProvider } from './src/lib/bookmarks';
 import { TourProvider } from './src/lib/tour';
+import { NEWS_CACHE_KEY } from './src/lib/cache';
+import { ThemeModeProvider } from './src/lib/themeMode';
 import { useTheme } from './src/theme';
+import { Image } from 'expo-image';
+import AsyncStorageAuto from '@react-native-async-storage/async-storage';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -26,7 +30,7 @@ const queryClient = new QueryClient({
 });
 
 // Saved stories survive app restarts and are shown when offline.
-const persister = createAsyncStoragePersister({ storage: AsyncStorage, key: 'fingist.cache.v1', throttleTime: 2000 });
+const persister = createAsyncStoragePersister({ storage: AsyncStorage, key: NEWS_CACHE_KEY, throttleTime: 2000 });
 
 // Refetch when the app comes back to the foreground.
 focusManager.setEventListener((setFocused) => {
@@ -38,11 +42,33 @@ focusManager.setEventListener((setFocused) => {
 onlineManager.setOnline(true);
 
 export default function App() {
+  return (
+    <ThemeModeProvider>
+      <AppContent />
+    </ThemeModeProvider>
+  );
+}
+
+const IMAGE_CLEAN_KEY = 'fingist.imageCacheCleanedAt';
+
+function AppContent() {
   const t = useTheme();
   const [restored, setRestored] = useState(false);
   useEffect(() => {
     SystemUI.setBackgroundColorAsync(t.bg).catch(() => {});
   }, [t.bg]);
+  // Keep downloaded card photos from piling up: clear the photo cache once a week.
+  useEffect(() => {
+    AsyncStorageAuto.getItem(IMAGE_CLEAN_KEY)
+      .then((v) => {
+        const week = 7 * DAY;
+        if (!v || Date.now() - Number(v) > week) {
+          Image.clearDiskCache().catch(() => {});
+          AsyncStorageAuto.setItem(IMAGE_CLEAN_KEY, String(Date.now())).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, []);
   return (
     <SafeAreaProvider>
       <PersistQueryClientProvider

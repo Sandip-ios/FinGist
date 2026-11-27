@@ -3,7 +3,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
-import { removeDevice, saveDevice } from './api';
+import { removeDevice, saveDevice, sendTestAlert, type TestAlertResult } from './api';
 import { config } from './config';
 import type { RegionFilter } from './types';
 
@@ -63,6 +63,8 @@ interface Alerts {
    * Resolves when the person has answered (or straight away on later launches).
    */
   firstRunPermission: () => Promise<void>;
+  /** Registers this phone again and sends a test alert; returns what happened. */
+  test: () => Promise<TestAlertResult>;
 }
 
 const Ctx = createContext<Alerts | null>(null);
@@ -148,6 +150,17 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
 
   const markPromptSeen = useCallback(() => { change((prev) => ({ ...prev, promptSeen: true })); }, [change]);
 
+  const test = useCallback(async (): Promise<TestAlertResult> => {
+    try {
+      const token = await getToken();
+      const p = change((prev) => ({ ...prev, enabled: true, token }));
+      await saveDevice({ token, platform: Platform.OS, ...devicePrefs(p) });
+      return await sendTestAlert(token);
+    } catch (e) {
+      return { ok: false, stage: 'phone', error: 'Phone', message: (e as Error).message };
+    }
+  }, [change]);
+
   const loaded = useRef<Promise<void> | null>(null);
   const firstRunPermission = useCallback(async () => {
     await loaded.current;
@@ -164,7 +177,7 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [change]);
 
-  const value = useMemo<Alerts>(() => ({ prefs: prefs ?? DEFAULTS, busy, error, setEnabled, update, markPromptSeen, firstRunPermission }), [prefs, busy, error, setEnabled, update, markPromptSeen, firstRunPermission]);
+  const value = useMemo<Alerts>(() => ({ prefs: prefs ?? DEFAULTS, busy, error, setEnabled, update, markPromptSeen, firstRunPermission, test }), [prefs, busy, error, setEnabled, update, markPromptSeen, firstRunPermission, test]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

@@ -59,3 +59,33 @@ export function inQuietHours(now: number): boolean {
   const { hour } = istParts(now);
   return hour >= 22 || hour < 7;
 }
+
+export const EXPO_RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts';
+
+/**
+ * Sends one test notification and reports what happened, including Apple/Google errors that only
+ * show up in Expo's delivery receipt (for example missing push credentials for a new build).
+ */
+export async function sendTestPush(token: string, wait = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<{ ok: boolean; stage: string; error?: string; message?: string }> {
+  const res = await fetch(EXPO_PUSH_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify([{ to: token, title: '✅ FinGist alerts are working', body: 'You will get market news alerts on this phone.', sound: 'default', channelId: 'breaking', data: { type: 'test' } }]),
+  });
+  if (!res.ok) return { ok: false, stage: 'send', error: `HTTP ${res.status}`, message: (await res.text()).slice(0, 200) };
+  const ticket = ((await res.json()) as { data?: PushTicket[] }).data?.[0];
+  if (!ticket || ticket.status !== 'ok' || !ticket.id) {
+    return { ok: false, stage: 'send', error: ticket?.details?.error ?? 'unknown', message: ticket?.message };
+  }
+  // Delivery problems (e.g. InvalidCredentials, DeviceNotRegistered) appear in the receipt a moment later.
+  for (const ms of [2500, 4000]) {
+    await wait(ms);
+    const r = await fetch(EXPO_RECEIPTS_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: [ticket.id] }) });
+    if (!r.ok) continue;
+    const receipt = ((await r.json()) as { data?: Record<string, PushTicket> }).data?.[ticket.id];
+    if (!receipt) continue;
+    if (receipt.status === 'ok') return { ok: true, stage: 'delivered to Apple/Google' };
+    return { ok: false, stage: 'delivery', error: receipt.details?.error ?? 'unknown', message: receipt.message };
+  }
+  return { ok: true, stage: 'sent (delivery receipt not ready yet)' };
+}

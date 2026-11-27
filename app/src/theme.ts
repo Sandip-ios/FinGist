@@ -1,3 +1,4 @@
+import { createContext, useContext } from 'react';
 import { useColorScheme } from 'react-native';
 import type { Ionicons } from '@expo/vector-icons';
 import type { Relevance, Sentiment } from './lib/types';
@@ -44,8 +45,16 @@ const dark: typeof light = {
 
 export type Theme = typeof light & { isDark: boolean };
 
+export type ThemeMode = 'system' | 'light' | 'dark';
+
+/** The person's Appearance choice (More → Appearance); 'system' follows the phone. */
+export const ThemeModeContext = createContext<{ mode: ThemeMode; setMode: (m: ThemeMode) => void }>({ mode: 'system', setMode: () => {} });
+export const useThemeMode = () => useContext(ThemeModeContext);
+
 export function useTheme(): Theme {
-  const isDark = useColorScheme() === 'dark';
+  const system = useColorScheme();
+  const { mode } = useContext(ThemeModeContext);
+  const isDark = mode === 'system' ? system === 'dark' : mode === 'dark';
   return { ...(isDark ? dark : light), isDark };
 }
 

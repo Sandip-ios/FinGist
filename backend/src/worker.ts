@@ -3,7 +3,7 @@ import { enrichBatch } from './enrich/enrich';
 import { RateLimitError, TransientError } from './enrich/gemini';
 import { photoSourceFromEnv } from './enrich/photos';
 import { deleteDevice, digestOnce, notifyOnce, upsertDevice } from './notify/notify';
-import { isExpoToken } from './notify/push';
+import { isExpoToken, sendTestPush } from './notify/push';
 import { IMAGE_TOPICS } from './data/imageTopics';
 import { dedupeList, titleTokens } from './ingest/dedupe';
 import { collectSource } from './pipeline';
@@ -124,6 +124,20 @@ export default {
       if (!/^[a-f0-9]{32}$/.test(id)) return json({ error: 'not found' }, 404);
       const story = await getStory(env.DB, id, await getPhotoCache(env.DB));
       return story ? json(story, 200, { 'cache-control': 'public, max-age=300' }) : json({ error: 'not found' }, 404);
+    }
+
+    if (path === '/v1/devices/test' && req.method === 'POST') {
+      let body: Record<string, unknown>;
+      try { body = (await req.json()) as Record<string, unknown>; } catch { return json({ error: 'invalid JSON' }, 400); }
+      if (!isExpoToken(body.token)) return json({ error: 'invalid token' }, 400);
+      // Only phones registered for alerts can ask for a test, at most once a minute.
+      const now = Date.now();
+      const dev = await env.DB.prepare('SELECT updated_at FROM devices WHERE token = ?1').bind(body.token).first<{ updated_at: number }>();
+      if (!dev) return json({ ok: false, stage: 'register', error: 'NotRegistered', message: 'This phone is not registered for alerts on the server yet.' });
+      const last = await env.DB.prepare('SELECT last_fetch_at FROM source_state WHERE source_id = ?1').bind(`__test_${body.token.slice(-12)}`).first<{ last_fetch_at: number }>();
+      if (last && now - last.last_fetch_at < 60_000) return json({ ok: false, stage: 'limit', error: 'TooSoon', message: 'Please wait a minute before sending another test.' });
+      await env.DB.prepare(`INSERT INTO source_state (source_id, last_fetch_at) VALUES (?1, ?2) ON CONFLICT(source_id) DO UPDATE SET last_fetch_at = ?2`).bind(`__test_${body.token.slice(-12)}`, now).run();
+      return json(await sendTestPush(body.token));
     }
 
     if (path === '/v1/devices' && (req.method === 'POST' || req.method === 'DELETE')) {

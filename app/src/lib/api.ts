@@ -48,3 +48,12 @@ export async function saveDevice(d: { token: string; platform: string; region: R
 export async function removeDevice(token: string): Promise<void> {
   await fetch(`${API_URL}/v1/devices`, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) });
 }
+
+export interface TestAlertResult { ok: boolean; stage: string; error?: string; message?: string }
+
+export async function sendTestAlert(token: string): Promise<TestAlertResult> {
+  const res = await fetch(`${API_URL}/v1/devices/test`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) });
+  if (res.status === 404) return { ok: false, stage: 'server', error: 'OldServer', message: 'The server needs the latest update (npm run deploy).' };
+  if (!res.ok) return { ok: false, stage: 'server', error: `HTTP ${res.status}` };
+  return (await res.json()) as TestAlertResult;
+}

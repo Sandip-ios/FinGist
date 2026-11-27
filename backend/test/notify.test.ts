@@ -54,3 +54,20 @@ describe('sendPush', () => {
     expect(r).toEqual({ sent: 2, invalid: ['gone'], errors: [] });
   });
 });
+
+describe('sendTestPush', () => {
+  it('reports Apple credential problems from the receipt', async () => {
+    const { sendTestPush } = await import('../src/notify/push');
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('/send')) return new Response(JSON.stringify({ data: [{ status: 'ok', id: 'r1' }] }));
+      return new Response(JSON.stringify({ data: { r1: { status: 'error', message: 'Could not find APNs credentials', details: { error: 'InvalidCredentials' } } } }));
+    }));
+    const r = await sendTestPush('ExponentPushToken[abcdefghijklmn]', async () => {});
+    expect(r).toEqual({ ok: false, stage: 'delivery', error: 'InvalidCredentials', message: 'Could not find APNs credentials' });
+  });
+  it('reports success when the receipt is ok', async () => {
+    const { sendTestPush } = await import('../src/notify/push');
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('/send') ? { data: [{ status: 'ok', id: 'r1' }] } : { data: { r1: { status: 'ok' } } }))));
+    expect((await sendTestPush('ExponentPushToken[abcdefghijklmn]', async () => {})).ok).toBe(true);
+  });
+});
