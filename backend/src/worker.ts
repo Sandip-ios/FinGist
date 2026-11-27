@@ -12,6 +12,8 @@ import {
   existingIds, getPhotoCache, getStory, searchStories, trendingCompanies, getSourceStates, recentTopics, releaseLease, savePhotos, saveSourceState, topicsToRefresh, insertStories, leasePending, markFailed, queryFeed, recentTitles, saveEnrichment,
 } from './store/db';
 import { CATEGORIES } from './types';
+import type { Photo } from './enrich/photos';
+import { pruneOld } from './store/db';
 
 export interface Env {
   DB: D1Database;
@@ -28,6 +30,8 @@ export interface Env {
   NOTIFY_DAILY_CAP?: string;
   NOTIFY_MAX_AGE_MIN?: string;
   INTERNAL_KEY: string;
+  /** Days of news kept in the database (older stories are deleted daily). */
+  RETAIN_DAYS?: string;
   GEMINI_MODEL: string;
   GEMINI_FALLBACK_MODEL?: string;
   MAX_AGE_HOURS: string;
@@ -40,6 +44,67 @@ const json = (data: unknown, status = 200, extra: Record<string, string> = {}) =
     status,
     headers: { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', ...extra },
   });
+
+// ---- Per-instance memory: keeps database reads low when many people open the app at once ----
+
+const memo = new Map<string, { until: number; body: string; status: number; headers: Record<string, string> }>();
+
+/** Serves the same answer for `ttlSec` seconds from memory instead of reading the database every time. */
+async function cached(key: string, ttlSec: number, make: () => Promise<Response>): Promise<Response> {
+  const now = Date.now();
+  const hit = memo.get(key);
+  if (hit && hit.until > now) return new Response(hit.body, { status: hit.status, headers: hit.headers });
+  const res = await make();
+  const body = await res.text();
+  const headers: Record<string, string> = {};
+  res.headers.forEach((v, k) => { headers[k] = v; });
+  if (res.status === 200) {
+    if (memo.size > 500) for (const [k, v] of memo) if (v.until <= now || memo.size > 400) memo.delete(k);
+    memo.set(key, { until: now + ttlSec * 1000, body, status: res.status, headers });
+  }
+  return new Response(body, { status: res.status, headers });
+}
+
+let photoMemo: { until: number; value: Map<string, Photo[]> } | null = null;
+async function photosFor(env: Env): Promise<Map<string, Photo[]>> {
+  if (photoMemo && photoMemo.until > Date.now()) return photoMemo.value;
+  const value = await getPhotoCache(env.DB);
+  photoMemo = { until: Date.now() + 5 * 60_000, value };
+  return value;
+}
+
+/** Simple per-IP limit for write requests (stops one client from flooding the database). */
+const hits = new Map<string, { until: number; n: number }>();
+const clientIp = (req: Request) => req.headers.get('cf-connecting-ip') ?? 'unknown';
+function tooMany(key: string, max: number, windowSec: number): boolean {
+  const now = Date.now();
+  const h = hits.get(key);
+  if (!h || h.until <= now) {
+    if (hits.size > 5000) hits.clear();
+    hits.set(key, { until: now + windowSec * 1000, n: 1 });
+    return false;
+  }
+  h.n += 1;
+  return h.n > max;
+}
+
+/** Constant-time comparison for the internal key. */
+function sameSecret(given: string | null, expected: string | undefined): boolean {
+  if (!given || !expected) return false;
+  const a = new TextEncoder().encode(given);
+  const b = new TextEncoder().encode(expected);
+  if (a.byteLength !== b.byteLength) return false;
+  let diff = 0;
+  for (let i = 0; i < a.byteLength; i++) diff |= a[i]! ^ b[i]!;
+  return diff === 0;
+}
+
+const HTML_SECURITY_HEADERS = {
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'x-frame-options': 'DENY',
+  'content-security-policy': "default-src 'self'; img-src 'self' https:; style-src 'self' 'unsafe-inline'; script-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+};
 
 export default {
   /** Cron: fan out one invocation per due feed, plus a few AI batches. */
@@ -62,6 +127,7 @@ export default {
       ...(imagesDue(env, states, now) ? ['/internal/images'] : []),
       '/internal/notify',
       '/internal/digest',
+      ...(pruneDue(states, now) ? ['/internal/prune'] : []),
     ];
     console.log(`cron: ${due.length} feeds due, ${batches} AI batches`);
     ctx.waitUntil(
@@ -78,10 +144,11 @@ export default {
     const path = url.pathname;
 
     if (path.startsWith('/internal/')) {
-      if (!env.INTERNAL_KEY || req.headers.get('x-internal-key') !== env.INTERNAL_KEY) return json({ error: 'forbidden' }, 403);
+      if (!sameSecret(req.headers.get('x-internal-key'), env.INTERNAL_KEY)) return json({ error: 'forbidden' }, 403);
       if (path.startsWith('/internal/ingest/')) return json(await ingestOne(env, path.slice('/internal/ingest/'.length)));
       if (path === '/internal/enrich') return json(await enrichOnce(env));
       if (path === '/internal/images') return json(await refreshImages(env));
+      if (path === '/internal/prune') return json(await prune(env));
       if (path === '/internal/notify') return json(await notifyOnce(env.DB, notifyConfig(env)));
       // ?at=<ms> lets the owner test a scheduled note outside its time window.
       if (path === '/internal/digest') return json(await digestOnce(env.DB, geminiConfig(env), notifyConfig(env).dailyCap, Number(url.searchParams.get('at')) || Date.now()));
@@ -91,67 +158,75 @@ export default {
     if (path === '/health') return json({ ok: true, time: Date.now() });
 
     if (path === '/v1/feed' && req.method === 'GET') {
-      const region = url.searchParams.get('region');
-      const category = url.searchParams.get('category');
-      const before = Number(url.searchParams.get('before')) || undefined;
-      const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 30, 1), 50);
-      const photos = await getPhotoCache(env.DB);
-      const items = await queryFeed(env.DB, {
-        region: region === 'india' || region === 'global' ? region : undefined,
-        category: category && (CATEGORIES as readonly string[]).includes(category) ? category : undefined,
-        before,
-        limit,
-      }, photos);
-      const last = items[items.length - 1];
-      return json(
-        { items, nextBefore: items.length === limit && last ? last.publishedAt : null },
-        200,
-        { 'cache-control': 'public, max-age=30' },
-      );
+      return cached(`feed${url.search}`, 30, async () => {
+        const region = url.searchParams.get('region');
+        const category = url.searchParams.get('category');
+        const before = Number(url.searchParams.get('before')) || undefined;
+        const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 30, 1), 50);
+        const items = await queryFeed(env.DB, {
+          region: region === 'india' || region === 'global' ? region : undefined,
+          category: category && (CATEGORIES as readonly string[]).includes(category) ? category : undefined,
+          before,
+          limit,
+        }, await photosFor(env));
+        const last = items[items.length - 1];
+        return json(
+          { items, nextBefore: items.length === limit && last ? last.publishedAt : null },
+          200,
+          { 'cache-control': 'public, max-age=30' },
+        );
+      });
     }
 
     if (path === '/v1/search' && req.method === 'GET') {
-      const q = (url.searchParams.get('q') ?? '').slice(0, 100);
-      const before = Number(url.searchParams.get('before')) || undefined;
-      const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 30, 1), 50);
-      const photos = await getPhotoCache(env.DB);
-      const items = await searchStories(env.DB, q, { before, limit }, photos);
-      const last = items[items.length - 1];
-      return json({ items, nextBefore: items.length === limit && last ? last.publishedAt : null }, 200, { 'cache-control': 'public, max-age=60' });
+      return cached(`search${url.search}`, 60, async () => {
+        const q = (url.searchParams.get('q') ?? '').slice(0, 100);
+        const before = Number(url.searchParams.get('before')) || undefined;
+        const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 30, 1), 50);
+        const items = await searchStories(env.DB, q, { before, limit }, await photosFor(env));
+        const last = items[items.length - 1];
+        return json({ items, nextBefore: items.length === limit && last ? last.publishedAt : null }, 200, { 'cache-control': 'public, max-age=60' });
+      });
     }
 
     // Shared story page: /s/<id> (rich link previews + "Read full story" + "Get the app").
     if (path.startsWith('/s/') && req.method === 'GET') {
       const id = path.slice(3).toLowerCase();
-      const story = /^[a-f0-9]{32}$/.test(id) ? await getStory(env.DB, id, await getPhotoCache(env.DB)) : null;
-      if (!story) return Response.redirect(`${url.origin}/`, 302);
-      return new Response(storyPage(story as unknown as SharedStory, `${url.origin}/s/${id}`, url.origin), {
-        headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=600' },
+      if (!/^[a-f0-9]{32}$/.test(id)) return Response.redirect(`${url.origin}/`, 302);
+      const res = await cached(`page/${id}`, 600, async () => {
+        const story = await getStory(env.DB, id, await photosFor(env));
+        if (!story) return new Response('not found', { status: 404 });
+        return new Response(storyPage(story as unknown as SharedStory, `${url.origin}/s/${id}`, url.origin), {
+          headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=600', ...HTML_SECURITY_HEADERS },
+        });
       });
+      return res.status === 404 ? Response.redirect(`${url.origin}/`, 302) : res;
     }
 
     if (path.startsWith('/v1/story/') && req.method === 'GET') {
       const id = path.slice('/v1/story/'.length);
       if (!/^[a-f0-9]{32}$/.test(id)) return json({ error: 'not found' }, 404);
-      const story = await getStory(env.DB, id, await getPhotoCache(env.DB));
-      return story ? json(story, 200, { 'cache-control': 'public, max-age=300' }) : json({ error: 'not found' }, 404);
+      return cached(`story/${id}`, 300, async () => {
+        const story = await getStory(env.DB, id, await photosFor(env));
+        return story ? json(story, 200, { 'cache-control': 'public, max-age=300' }) : json({ error: 'not found' }, 404);
+      });
     }
 
     if (path === '/v1/devices/test' && req.method === 'POST') {
       let body: Record<string, unknown>;
       try { body = (await req.json()) as Record<string, unknown>; } catch { return json({ error: 'invalid JSON' }, 400); }
       if (!isExpoToken(body.token)) return json({ error: 'invalid token' }, 400);
-      // Only phones registered for alerts can ask for a test, at most once a minute.
-      const now = Date.now();
-      const dev = await env.DB.prepare('SELECT updated_at FROM devices WHERE token = ?1').bind(body.token).first<{ updated_at: number }>();
+      // Only phones registered for alerts can ask for a test, at most once a minute (kept in memory, no database writes).
+      if (tooMany(`test-ip:${clientIp(req)}`, 2, 60) || tooMany(`test-token:${body.token}`, 1, 60)) {
+        return json({ ok: false, stage: 'limit', error: 'TooSoon', message: 'Please wait a minute before sending another test.' });
+      }
+      const dev = await env.DB.prepare('SELECT 1 AS ok FROM devices WHERE token = ?1').bind(body.token).first<{ ok: number }>();
       if (!dev) return json({ ok: false, stage: 'register', error: 'NotRegistered', message: 'This phone is not registered for alerts on the server yet.' });
-      const last = await env.DB.prepare('SELECT last_fetch_at FROM source_state WHERE source_id = ?1').bind(`__test_${body.token.slice(-12)}`).first<{ last_fetch_at: number }>();
-      if (last && now - last.last_fetch_at < 60_000) return json({ ok: false, stage: 'limit', error: 'TooSoon', message: 'Please wait a minute before sending another test.' });
-      await env.DB.prepare(`INSERT INTO source_state (source_id, last_fetch_at) VALUES (?1, ?2) ON CONFLICT(source_id) DO UPDATE SET last_fetch_at = ?2`).bind(`__test_${body.token.slice(-12)}`, now).run();
       return json(await sendTestPush(body.token));
     }
 
     if (path === '/v1/devices' && (req.method === 'POST' || req.method === 'DELETE')) {
+      if (tooMany(`devices:${clientIp(req)}`, 30, 3600)) return json({ error: 'too many requests' }, 429);
       let body: Record<string, unknown>;
       try { body = (await req.json()) as Record<string, unknown>; } catch { return json({ error: 'invalid JSON' }, 400); }
       if (!isExpoToken(body.token)) return json({ error: 'invalid token' }, 400);
@@ -166,8 +241,10 @@ export default {
     }
 
     if (path === '/v1/trending' && req.method === 'GET') {
-      const companies = await trendingCompanies(env.DB, Date.now() - 24 * 3_600_000);
-      return json({ companies }, 200, { 'cache-control': 'public, max-age=300' });
+      return cached('trending', 300, async () => {
+        const companies = await trendingCompanies(env.DB, Date.now() - 24 * 3_600_000);
+        return json({ companies }, 200, { 'cache-control': 'public, max-age=300' });
+      });
     }
 
     if (path === '/v1/sources') {
@@ -204,6 +281,7 @@ async function runJob(env: Env, path: string): Promise<void> {
     : path === '/internal/notify' ? await notifyOnce(env.DB, notifyConfig(env))
     : path === '/internal/digest' ? await digestOnce(env.DB, geminiConfig(env), notifyConfig(env).dailyCap)
     : path === '/internal/images' ? await refreshImages(env)
+    : path === '/internal/prune' ? await prune(env)
     : await ingestOne(env, path.slice('/internal/ingest/'.length));
   console.log(path, '(inline)', JSON.stringify(result).slice(0, 200));
 }
@@ -276,6 +354,21 @@ function notifyConfig(env: Env) {
     dailyCap: Number(env.NOTIFY_DAILY_CAP) || 8,
     maxAgeMinutes: Number(env.NOTIFY_MAX_AGE_MIN) || 90,
   };
+}
+
+const PRUNE_STATE_ID = '__prune';
+
+function pruneDue(states: Map<string, { last_fetch_at: number }>, now: number): boolean {
+  return now - (states.get(PRUNE_STATE_ID)?.last_fetch_at ?? 0) >= 24 * 3_600_000;
+}
+
+/** Once a day: delete stories older than RETAIN_DAYS (default 45) so the database and searches stay small and fast. */
+async function prune(env: Env) {
+  const now = Date.now();
+  const days = Number(env.RETAIN_DAYS) || 45;
+  const deleted = await pruneOld(env.DB, now - days * 86_400_000);
+  await saveSourceState(env.DB, PRUNE_STATE_ID, now, { ok: true, newItems: deleted });
+  return { deleted, keptDays: days };
 }
 
 const IMAGES_STATE_ID = '__images';

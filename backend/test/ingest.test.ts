@@ -91,3 +91,12 @@ describe('dedupe', () => {
     expect(dropped).toHaveLength(1);
   });
 });
+
+describe('links', () => {
+  it('drops feed items whose link is not a web address', async () => {
+    const src = { id: 't', name: 'T', url: 'https://x', region: 'india', kind: 'news', pollMinutes: 5, enabled: true } as never;
+    const base = { title: 'Sensex rises 500 points on bank rally', description: 'x', published: undefined };
+    expect(await toStory({ ...base, link: 'javascript:alert(1)' } as never, src, Date.now())).toBeUndefined();
+    expect(await toStory({ ...base, link: 'https://example.com/a' } as never, src, Date.now())).toBeDefined();
+  });
+});

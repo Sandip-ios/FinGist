@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildMessage, eligible } from '../src/notify/notify';
+import { buildMessage, eligible, withCounts } from '../src/notify/notify';
 import { inQuietHours, isExpoToken, istParts, sendPush } from '../src/notify/push';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -69,5 +69,13 @@ describe('sendTestPush', () => {
     const { sendTestPush } = await import('../src/notify/push');
     vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('/send') ? { data: [{ status: 'ok', id: 'r1' }] } : { data: { r1: { status: 'ok' } } }))));
     expect((await sendTestPush('ExponentPushToken[abcdefghijklmn]', async () => {})).ok).toBe(true);
+  });
+});
+
+describe('daily limit per audience', () => {
+  it('stops an audience at the cap without touching others', () => {
+    const ds = [dev({ token: 'in', region: 'india', quiet_hours: 0 }), dev({ token: 'gl', region: 'global', quiet_hours: 0 }), dev({ token: 'all', quiet_hours: 0 })];
+    const counted = withCounts(ds, new Map([['india', 8], ['all', 3]]), DAY_IST);
+    expect(eligible(counted, 'both', DAY_IST, 8).map((d) => d.token)).toEqual(['gl', 'all']);
   });
 });

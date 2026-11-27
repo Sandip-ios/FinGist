@@ -300,3 +300,10 @@ export async function savePhotos(db: D1Database, topic: string, photos: Photo[] 
       ON CONFLICT(topic) DO UPDATE SET fetched_at = ?2, last_error = ?3`).bind(topic, now, error ?? 'no photos').run();
   }
 }
+
+/** Deletes stories published before `cutoff` (search index rows go with them via triggers), plus leftover test-alert markers. */
+export async function pruneOld(db: D1Database, cutoff: number): Promise<number> {
+  const r = await db.prepare('DELETE FROM stories WHERE published_at < ?1').bind(cutoff).run();
+  await db.prepare("DELETE FROM source_state WHERE source_id LIKE '\\_\\_test\\_%' ESCAPE '\\'").run();
+  return r.meta.changes ?? 0;
+}

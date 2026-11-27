@@ -73,6 +73,8 @@ export async function toStory(item: FeedItem, source: Source, now: number): Prom
   const title = stripHtml(item.title);
   if (title.length < 8) return undefined;
   const url = canonicalUrl(decodeEntities(item.link));
+  // Only web links: never javascript:, data: or app links from a feed.
+  if (!/^https:\/\/[^/]/i.test(url)) return undefined;
   let snippet = stripHtml(item.description);
   if (snippet.toLowerCase() === title.toLowerCase()) snippet = '';
   if (snippet.length > SNIPPET_MAX) snippet = snippet.slice(0, SNIPPET_MAX).replace(/\s\S*$/, '') + '…';

@@ -55,7 +55,7 @@ export async function notifyOnce(db: D1Database, cfg: NotifyConfig, now = Date.n
     .first<Candidate>();
   if (!c) return { skipped: 'no new high-relevance story' };
 
-  const all = (await db.prepare('SELECT token, region, quiet_hours, sent_day, sent_count FROM devices WHERE breaking = 1').all<Device>()).results;
+  const all = withCounts((await db.prepare('SELECT token, region, quiet_hours FROM devices WHERE breaking = 1').all<Device>()).results, await loadCounts(db, now), now);
   const targets = eligible(all, c.region_impact ?? c.region, now, cfg.dailyCap);
   await db.prepare('UPDATE stories SET notified_at = ?2 WHERE id = ?1').bind(c.id, now).run();
   if (!targets.length) return { story: c.id, sent: 0, devices: all.length };
@@ -65,17 +65,29 @@ export async function notifyOnce(db: D1Database, cfg: NotifyConfig, now = Date.n
   return { story: c.id, targets: targets.length, sent: result.sent, removed: result.invalid.length, errors: result.errors.slice(0, 3) };
 }
 
-/** Updates daily counters, removes dead tokens and remembers the time of the last alert. */
+/** Today's alert count per audience (all / india / global). Every phone in an audience gets the same alerts. */
+async function loadCounts(db: D1Database, now: number): Promise<Map<string, number>> {
+  const { results } = await db.prepare('SELECT audience, count FROM alert_counts WHERE day = ?1').bind(istParts(now).day).all<{ audience: string; count: number }>();
+  return new Map(results.map((r) => [r.audience, r.count]));
+}
+
+/** Gives each phone its audience's count for today, so `eligible` can apply the daily limit. */
+export function withCounts(devices: Device[], counts: Map<string, number>, now: number): Device[] {
+  const { day } = istParts(now);
+  return devices.map((d) => ({ ...d, sent_day: day, sent_count: counts.get(d.region) ?? 0 }));
+}
+
+/** Updates the daily counters (one row per audience, not per phone), removes dead tokens and remembers the last alert time. */
 async function recordSends(db: D1Database, targets: Device[], invalid: string[], now: number) {
   const { day } = istParts(now);
-  const ok = targets.map((d) => d.token).filter((t) => !invalid.includes(t));
-  for (let i = 0; i < ok.length; i += 90) {
-    const chunk = ok.slice(i, i + 90);
+  const audiences = [...new Set(targets.filter((d) => !invalid.includes(d.token)).map((d) => d.region))];
+  for (const audience of audiences) {
     await db
-      .prepare(`UPDATE devices SET sent_count = CASE WHEN sent_day = ?1 THEN sent_count + 1 ELSE 1 END, sent_day = ?1 WHERE token IN (${chunk.map((_, j) => `?${j + 2}`).join(',')})`)
-      .bind(day, ...chunk)
+      .prepare('INSERT INTO alert_counts (day, audience, count) VALUES (?1, ?2, 1) ON CONFLICT(day, audience) DO UPDATE SET count = count + 1')
+      .bind(day, audience)
       .run();
   }
+  await db.prepare('DELETE FROM alert_counts WHERE day < ?1').bind(istParts(now - 3 * 86_400_000).day).run();
   for (let i = 0; i < invalid.length; i += 90) {
     const chunk = invalid.slice(i, i + 90);
     await db.prepare(`DELETE FROM devices WHERE token IN (${chunk.map((_, j) => `?${j + 1}`).join(',')})`).bind(...chunk).run();
@@ -108,7 +120,8 @@ async function sendDigest(db: D1Database, gemini: GeminiConfig, dailyCap: number
 
   const column = kind === 'morning' ? 'morning' : 'market_open';
   const audiences = DIGEST_AUDIENCES[kind];
-  const devices = (await db.prepare(`SELECT token, region, quiet_hours, sent_day, sent_count FROM devices WHERE ${column} = 1`).all<Device>()).results
+  const counts = await loadCounts(db, now);
+  const devices = withCounts((await db.prepare(`SELECT token, region, quiet_hours FROM devices WHERE ${column} = 1`).all<Device>()).results, counts, now)
     .filter((d) => audiences.includes((d.region as Audience) ?? 'all'));
 
   // One note per audience for the morning mood; one shared note for the market opens.
@@ -215,7 +228,10 @@ export async function upsertDevice(db: D1Database, d: DevicePrefs, now: number) 
   await db
     .prepare(
       `INSERT INTO devices (token, platform, region, quiet_hours, morning, market_open, breaking, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)
-       ON CONFLICT(token) DO UPDATE SET platform = ?2, region = ?3, quiet_hours = ?4, morning = ?5, market_open = ?6, breaking = ?7, updated_at = ?8`,
+       ON CONFLICT(token) DO UPDATE SET platform = ?2, region = ?3, quiet_hours = ?4, morning = ?5, market_open = ?6, breaking = ?7, updated_at = ?8
+       -- Phones re-register on every app start: only write when something changed (or once a week, to mark the phone as active).
+       WHERE devices.platform IS NOT ?2 OR devices.region IS NOT ?3 OR devices.quiet_hours IS NOT ?4 OR devices.morning IS NOT ?5
+          OR devices.market_open IS NOT ?6 OR devices.breaking IS NOT ?7 OR devices.updated_at < ?8 - 604800000`,
     )
     .bind(d.token, d.platform, d.region, d.quietHours ? 1 : 0, d.morning ? 1 : 0, d.marketOpen ? 1 : 0, d.breaking ? 1 : 0, now)
     .run();
