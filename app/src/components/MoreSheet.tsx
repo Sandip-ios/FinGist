@@ -4,7 +4,6 @@ import * as WebBrowser from 'expo-web-browser';
 import { Alert, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAlerts } from '../lib/alerts';
-import { useTour } from '../lib/tour';
 import { config } from '../lib/config';
 import type { RegionFilter } from '../lib/types';
 import { BRAND, useTheme, type Theme } from '../theme';
@@ -59,8 +58,7 @@ function storeUrl(): string {
 }
 
 /** Settings and info: alerts, share/rate/feedback, legal pages, about. */
-export function MoreSheet({ visible, onClose, onShowTour }: { visible: boolean; onClose: () => void; onShowTour: () => void }) {
-  const tour = useTour();
+export function MoreSheet({ visible, onClose, onShowTour, onDismiss }: { visible: boolean; onClose: () => void; onShowTour: () => void; onDismiss?: () => void }) {
   const t = useTheme();
   const st = styles(t);
   const insets = useSafeAreaInsets();
@@ -106,7 +104,7 @@ export function MoreSheet({ visible, onClose, onShowTour }: { visible: boolean; 
   ];
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} onDismiss={onDismiss}>
       <View style={[st.container, { paddingBottom: insets.bottom }]}>
         <View style={st.header}>
           <Text style={st.h1}>More</Text>
@@ -160,7 +158,7 @@ export function MoreSheet({ visible, onClose, onShowTour }: { visible: boolean; 
           <View>
             <Text style={st.section}>FinGist</Text>
             <View style={st.group}>
-              <SettingRow {...rt} icon="map" label="Show app tour" onPress={() => { onShowTour(); setTimeout(tour.start, 700); }} />
+              <SettingRow {...rt} icon="map" label="Show app tour" onPress={onShowTour} />
               <View style={st.divider} />
               <SettingRow {...rt} icon="share-social" label="Share FinGist" onPress={shareApp} />
               <View style={st.divider} />

@@ -7,7 +7,7 @@
     "icon": "./assets/icon.png",
     "scheme": "fingist",
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#01208e",
+    "backgroundColor": "#eef3fb",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.sandippatel.fingist",
@@ -41,8 +41,17 @@
         {
           "image": "./assets/splash-blank.png",
           "imageWidth": 64,
-          "resizeMode": "contain",
-          "backgroundColor": "#01208e"
+          "backgroundColor": "#eef3fb",
+          "ios": {
+            "image": "./assets/splash-full.png",
+            "resizeMode": "cover",
+            "backgroundColor": "#eef3fb"
+          },
+          "android": {
+            "image": "./assets/splash-blank.png",
+            "imageWidth": 64,
+            "backgroundColor": "#eef3fb"
+          }
         }
       ],
       "expo-image",

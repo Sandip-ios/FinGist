@@ -2,10 +2,10 @@
 # One-time setup in GitHub: Settings → Pages → Build and deployment → Source: "GitHub Actions".
 name: Publish website
 
+# The website is served by the FinGist Worker (backend/wrangler.toml [assets]); this optional
+# GitHub Pages copy only runs when started by hand (Actions → Publish website → Run workflow)
+# after enabling Pages (Settings → Pages → Source: GitHub Actions).
 on:
-  push:
-    branches: [main, phase-2-app]
-    paths: ['website/**', '.github/workflows/website.yml']
   workflow_dispatch:
 
 permissions:

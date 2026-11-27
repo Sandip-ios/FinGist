@@ -4,7 +4,7 @@ import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBookmarks } from '../lib/bookmarks';
 import { OpenSearchContext } from '../lib/openSearch';
-import { useTourRef } from '../lib/tour';
+import { useTour, useTourRef } from '../lib/tour';
 import type { RegionFilter } from '../lib/types';
 import { BRAND, useTheme } from '../theme';
 import { fetchStory } from '../lib/api';
@@ -53,6 +53,8 @@ export function FeedScreen() {
     });
     return () => sub.remove();
   }, []);
+  const tour = useTour();
+  const tourPending = useRef(false);
   const searchRef = useTourRef('search');
   const savedRef = useTourRef('saved');
   const menuRef = useTourRef('menu');
@@ -111,7 +113,19 @@ export function FeedScreen() {
 
       </View>
 
-      <MoreSheet visible={moreOpen} onClose={() => setMoreOpen(false)} onShowTour={() => { setMoreOpen(false); selectTab(0); }} />
+      <MoreSheet
+        visible={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        onShowTour={() => {
+          // Start only after the More sheet has fully closed: while it animates, iOS shows the
+          // screen behind it shrunk, so positions measured then would be wrong.
+          tourPending.current = true;
+          setMoreOpen(false);
+          selectTab(0);
+          setTimeout(() => { if (tourPending.current) { tourPending.current = false; tour.start(); } }, 1200);
+        }}
+        onDismiss={() => { if (tourPending.current) { tourPending.current = false; setTimeout(tour.start, 250); } }}
+      />
       <TourOverlay />
       <StoryViewer stories={alertStory} start={0} title="Breaking news" onClose={() => setAlertStory(null)} />
       <SavedSheet visible={savedOpen} onClose={() => setSavedOpen(false)} />

@@ -41,15 +41,17 @@ export function TourOverlay() {
     fade.setValue(0);
     const node = tour.target(step.target);
     if (!node) { tour.next(); return; }
-    const id = setTimeout(() => {
+    const measure = (first: boolean) =>
       node.measureInWindow((x, y, w, h) => {
-        if (!w || !h || x + w < 0 || x > W || y + h < 0 || y > H) { tour.next(); return; }
+        if (!w || !h || x + w < 0 || x > W || y + h < 0 || y > H) { if (first) tour.next(); return; }
         const p = step.pad ?? 6;
         setRect({ x: x - p, y: y - p, w: w + p * 2, h: h + p * 2 });
-        Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+        if (first) Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }).start();
       });
-    }, 120);
-    return () => clearTimeout(id);
+    // Measure, then again a moment later in case the screen was still settling.
+    const id = setTimeout(() => measure(true), 150);
+    const id2 = setTimeout(() => measure(false), 500);
+    return () => { clearTimeout(id); clearTimeout(id2); };
   }, [tour.active, tour.step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
