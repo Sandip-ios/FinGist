@@ -6,6 +6,7 @@ import type { Story } from '../lib/types';
 import { useTheme } from '../theme';
 import { NewsCard } from './NewsCard';
 import { StackedCard } from './StackedCard';
+import { StackedCell } from './StackedCell';
 
 /** Full-screen swipeable cards for a list of stories (search results, saved), starting at `start`. */
 export function StoryViewer({ stories, start, title, onClose }: { stories: Story[] | null; start: number; title: string; onClose: () => void }) {
@@ -43,6 +44,7 @@ export function StoryViewer({ stories, start, title, onClose }: { stories: Story
               onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: Platform.OS !== 'web' })}
               scrollEventThrottle={16}
               removeClippedSubviews={false}
+              CellRendererComponent={StackedCell}
               windowSize={5}
             />
           )}

@@ -9,6 +9,7 @@ import type { RegionFilter, Story } from '../lib/types';
 import { BRAND, useTheme } from '../theme';
 import { NewsCard } from './NewsCard';
 import { StackedCard } from './StackedCard';
+import { StackedCell } from './StackedCell';
 
 const PAGE_SIZE = 30;
 
@@ -127,6 +128,7 @@ export function CategoryFeed({ region, category }: { region: RegionFilter; categ
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: Platform.OS !== 'web' })}
           scrollEventThrottle={16}
           removeClippedSubviews={false}
+          CellRendererComponent={StackedCell}
           getItemLayout={(_: unknown, i: number) => ({ length: h, offset: h * i, index: i })}
           snapToInterval={h}
           snapToAlignment="start"

@@ -9,6 +9,47 @@ import { config } from '../lib/config';
 import type { RegionFilter } from '../lib/types';
 import { BRAND, useTheme, type Theme } from '../theme';
 
+const MORNING_SUB: Record<RegionFilter, string> = {
+  india: 'Weekdays about 8:45 am, before NSE/BSE open',
+  global: 'Weekdays about 8:45 am, world markets overnight',
+  all: 'Weekdays about 8:45 am, India and world markets',
+};
+
+const MARKET_OPEN_SUB: Record<RegionFilter, string> = {
+  india: 'Weekdays about 9:30 am, after NSE/BSE open',
+  global: 'Wall Street, ~20 min after the US open (8–9 pm IST)',
+  all: 'India 9:30 am · Wall Street 8–9 pm IST',
+};
+
+interface RowProps {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  sub?: string;
+  onPress?: () => void;
+  right?: React.ReactNode;
+  t: Theme;
+  st: ReturnType<typeof styles>;
+  accent: string;
+}
+
+/** One settings row. Defined outside the screen so rows and their switches are not rebuilt on every tap. */
+function SettingRow({ icon, label, sub, onPress, right, t, st, accent }: RowProps) {
+  return (
+    <Pressable onPress={onPress} disabled={!onPress} style={({ pressed }) => [st.row, pressed && onPress && { backgroundColor: t.tabIdle }]}>
+      <View style={[st.rowIcon, { backgroundColor: t.chip }]}><Ionicons name={icon} size={17} color={accent} /></View>
+      <View style={{ flex: 1 }}>
+        <Text style={st.rowLabel}>{label}</Text>
+        {sub ? <Text style={st.rowSub}>{sub}</Text> : null}
+      </View>
+      {right ?? (onPress ? <Ionicons name="chevron-forward" size={18} color={t.textMuted} /> : null)}
+    </Pressable>
+  );
+}
+
+function Toggle({ value, onChange, disabled }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return <Switch value={value} disabled={disabled} onValueChange={onChange} trackColor={{ true: BRAND.navy }} />;
+}
+
 const SOURCES = 'Economic Times, Mint, BusinessLine, CNBC-TV18, MarketWatch, Reserve Bank of India, SEBI, US Federal Reserve';
 
 function storeUrl(): string {
@@ -56,16 +97,7 @@ export function MoreSheet({ visible, onClose, onShowTour }: { visible: boolean; 
     WebBrowser.openBrowserAsync(url, { controlsColor: BRAND.navy }).catch(() => {});
   };
 
-  const Row = ({ icon, label, sub, onPress, right }: { icon: keyof typeof Ionicons.glyphMap; label: string; sub?: string; onPress?: () => void; right?: React.ReactNode }) => (
-    <Pressable onPress={onPress} disabled={!onPress} style={({ pressed }) => [st.row, pressed && onPress && { backgroundColor: t.tabIdle }]}>
-      <View style={[st.rowIcon, { backgroundColor: t.chip }]}><Ionicons name={icon} size={17} color={accent} /></View>
-      <View style={{ flex: 1 }}>
-        <Text style={st.rowLabel}>{label}</Text>
-        {sub ? <Text style={st.rowSub}>{sub}</Text> : null}
-      </View>
-      {right ?? (onPress ? <Ionicons name="chevron-forward" size={18} color={t.textMuted} /> : null)}
-    </Pressable>
-  );
+  const rt = { t, st, accent };
 
   const regionOptions: { id: RegionFilter; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -86,28 +118,23 @@ export function MoreSheet({ visible, onClose, onShowTour }: { visible: boolean; 
           <View>
             <Text style={st.section}>News alerts</Text>
             <View style={st.group}>
-              <Row
+              <SettingRow
+                {...rt}
                 icon="notifications"
                 label="News alerts"
-                right={<Switch value={alerts.prefs.enabled} disabled={alerts.busy} onValueChange={(v) => { void alerts.setEnabled(v); }} trackColor={{ true: BRAND.navy }} />}
+                right={<Toggle value={alerts.prefs.enabled} disabled={alerts.busy} onChange={(v) => { void alerts.setEnabled(v); }} />}
               />
               {alerts.prefs.enabled && (
                 <>
                   <View style={st.divider} />
-                  <Row icon="sunny" label="Morning market mood" sub="Weekdays, about 8:45 am" right={<Switch value={alerts.prefs.morning} onValueChange={(v) => { void alerts.update({ morning: v }); }} trackColor={{ true: BRAND.navy }} />} />
-                  <View style={st.divider} />
-                  <Row icon="trending-up" label="Market open update" sub="Weekdays, about 9:30 am" right={<Switch value={alerts.prefs.marketOpen} onValueChange={(v) => { void alerts.update({ marketOpen: v }); }} trackColor={{ true: BRAND.navy }} />} />
-                  <View style={st.divider} />
-                  <Row icon="flash" label="Breaking news" sub="Important stories during the day" right={<Switch value={alerts.prefs.breaking} onValueChange={(v) => { void alerts.update({ breaking: v }); }} trackColor={{ true: BRAND.navy }} />} />
-                  <View style={st.divider} />
                   <View style={st.row}>
                     <View style={[st.rowIcon, { backgroundColor: t.chip }]}><Ionicons name="earth" size={17} color={accent} /></View>
-                    <Text style={[st.rowLabel, { flex: 1 }]}>Breaking news for</Text>
+                    <Text style={[st.rowLabel, { flex: 1 }]}>Alerts for</Text>
                     <View style={st.segment}>
                       {regionOptions.map((o) => {
                         const active = alerts.prefs.region === o.id;
                         return (
-                          <Pressable key={o.id} onPress={() => alerts.update({ region: o.id })} style={[st.segItem, active && { backgroundColor: accent }]}>
+                          <Pressable key={o.id} onPress={() => { void alerts.update({ region: o.id }); }} style={[st.segItem, active && { backgroundColor: accent }]}>
                             <Text style={[st.segText, { color: active ? (t.isDark ? '#0b1222' : '#fff') : t.textMuted }]}>{o.label}</Text>
                           </Pressable>
                         );
@@ -115,38 +142,40 @@ export function MoreSheet({ visible, onClose, onShowTour }: { visible: boolean; 
                     </View>
                   </View>
                   <View style={st.divider} />
-                  <Row
-                    icon="moon"
-                    label="Quiet hours (10 pm–7 am)"
-                    right={<Switch value={alerts.prefs.quietHours} onValueChange={(v) => alerts.update({ quietHours: v })} trackColor={{ true: BRAND.navy }} />}
-                  />
+                  <SettingRow {...rt} icon="sunny" label="Morning market mood" sub={MORNING_SUB[alerts.prefs.region]} right={<Toggle value={alerts.prefs.morning} onChange={(v) => { void alerts.update({ morning: v }); }} />} />
+                  <View style={st.divider} />
+                  <SettingRow {...rt} icon="trending-up" label="Market open" sub={MARKET_OPEN_SUB[alerts.prefs.region]} right={<Toggle value={alerts.prefs.marketOpen} onChange={(v) => { void alerts.update({ marketOpen: v }); }} />} />
+                  <View style={st.divider} />
+                  <SettingRow {...rt} icon="flash" label="Breaking news" sub="Important stories during the day" right={<Toggle value={alerts.prefs.breaking} onChange={(v) => { void alerts.update({ breaking: v }); }} />} />
+                  <View style={st.divider} />
+                  <SettingRow {...rt} icon="moon" label="Quiet hours" sub="No alerts from 10 pm to 7 am" right={<Toggle value={alerts.prefs.quietHours} onChange={(v) => { void alerts.update({ quietHours: v }); }} />} />
                 </>
               )}
             </View>
             <Text style={st.note}>
-              {alerts.error ?? 'At most 8 alerts a day in total. Turn off any type, or all alerts, at any time.'}
+              {alerts.error ?? 'All alerts follow your All / India / Global choice. At most 8 a day; turn off any type at any time.'}
             </Text>
           </View>
 
           <View>
             <Text style={st.section}>FinGist</Text>
             <View style={st.group}>
-              <Row icon="map" label="Show app tour" onPress={() => { onShowTour(); setTimeout(tour.start, 700); }} />
+              <SettingRow {...rt} icon="map" label="Show app tour" onPress={() => { onShowTour(); setTimeout(tour.start, 700); }} />
               <View style={st.divider} />
-              <Row icon="share-social" label="Share FinGist" onPress={shareApp} />
+              <SettingRow {...rt} icon="share-social" label="Share FinGist" onPress={shareApp} />
               <View style={st.divider} />
-              <Row icon="star" label="Rate FinGist" onPress={rateApp} />
+              <SettingRow {...rt} icon="star" label="Rate FinGist" onPress={rateApp} />
               <View style={st.divider} />
-              <Row icon="chatbubble-ellipses" label="Send feedback" onPress={feedback} />
+              <SettingRow {...rt} icon="chatbubble-ellipses" label="Send feedback" onPress={feedback} />
             </View>
           </View>
 
           <View>
             <Text style={st.section}>Legal</Text>
             <View style={st.group}>
-              <Row icon="document-text" label="Terms & Conditions" onPress={() => openPage(config.termsUrl, 'Terms & Conditions')} />
+              <SettingRow {...rt} icon="document-text" label="Terms & Conditions" onPress={() => openPage(config.termsUrl, 'Terms & Conditions')} />
               <View style={st.divider} />
-              <Row icon="lock-closed" label="Privacy Policy" onPress={() => openPage(config.privacyUrl, 'Privacy Policy')} />
+              <SettingRow {...rt} icon="lock-closed" label="Privacy Policy" onPress={() => openPage(config.privacyUrl, 'Privacy Policy')} />
             </View>
           </View>
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { digestPrompt, dueDigest, istClock, validateDigest } from '../src/notify/digest';
+import { digestDay, digestPrompt, dueDigests, istClock, nyClock, validateDigest } from '../src/notify/digest';
 
 // Thursday 26 Nov 2026; IST = UTC + 5:30
 const at = (istHHMM: string, date = '2026-11-26') => Date.parse(`${date}T${istHHMM}:00+05:30`);
@@ -9,21 +9,32 @@ const stories = [
 ];
 
 describe('schedule', () => {
-  it('runs the morning note 8:40–9:10 and the open update 9:30–10:00 IST on weekdays', () => {
-    expect(dueDigest(at('08:39'))).toBeNull();
-    expect(dueDigest(at('08:45'))).toBe('morning');
-    expect(dueDigest(at('09:09'))).toBe('morning');
-    expect(dueDigest(at('09:20'))).toBeNull();
-    expect(dueDigest(at('09:30'))).toBe('market_open');
-    expect(dueDigest(at('09:59'))).toBe('market_open');
-    expect(dueDigest(at('10:00'))).toBeNull();
+  it('runs the morning note 8:40–9:10 and the Indian open 9:30–10:00 IST on weekdays', () => {
+    expect(dueDigests(at('08:39'))).toEqual([]);
+    expect(dueDigests(at('08:45'))).toEqual(['morning']);
+    expect(dueDigests(at('09:09'))).toEqual(['morning']);
+    expect(dueDigests(at('09:20'))).toEqual([]);
+    expect(dueDigests(at('09:30'))).toEqual(['market_open']);
+    expect(dueDigests(at('09:59'))).toEqual(['market_open']);
+    expect(dueDigests(at('10:00'))).toEqual([]);
+  });
+  it('runs the Wall Street open 9:50–10:20 New York time, following US daylight saving', () => {
+    // 26 Nov 2026: New York is on EST (UTC-5) -> 9:50 NY = 20:20 IST
+    expect(dueDigests(Date.parse('2026-11-26T09:55:00-05:00'))).toEqual(['us_open']);
+    expect(dueDigests(Date.parse('2026-11-26T09:45:00-05:00'))).toEqual([]);
+    // 15 Jul 2026: EDT (UTC-4)
+    expect(dueDigests(Date.parse('2026-07-15T10:10:00-04:00'))).toEqual(['us_open']);
+    expect(nyClock(Date.parse('2026-07-15T10:10:00-04:00'))).toEqual({ minutes: 610, weekday: 3, day: '2026-07-15' });
   });
   it('skips weekends', () => {
-    expect(dueDigest(at('08:45', '2026-11-28'))).toBeNull(); // Saturday
-    expect(dueDigest(at('09:30', '2026-11-29'))).toBeNull(); // Sunday
+    expect(dueDigests(at('08:45', '2026-11-28'))).toEqual([]); // Saturday
+    expect(dueDigests(at('09:30', '2026-11-29'))).toEqual([]); // Sunday
+    expect(dueDigests(Date.parse('2026-11-28T10:00:00-05:00'))).toEqual([]); // Saturday in New York
   });
-  it('reads Indian time', () => {
+  it('reads Indian time and uses the right calendar day', () => {
     expect(istClock(at('09:15'))).toEqual({ minutes: 555, weekday: 4, day: '2026-11-26' });
+    // 10:00 NY on 26 Nov is already 27 Nov in India; the US note belongs to 26 Nov.
+    expect(digestDay('us_open', Date.parse('2026-11-26T10:00:00-05:00'))).toBe('2026-11-26');
   });
 });
 
@@ -41,7 +52,10 @@ describe('validateDigest', () => {
     expect(validateDigest('', stories)).toBeNull();
     expect(validateDigest('word '.repeat(60), stories)).toBeNull();
   });
-  it('builds a prompt with the stories', () => {
+  it('builds a prompt per audience', () => {
+    expect(digestPrompt('morning', stories, 'india')).toContain('for Indian investors');
+    expect(digestPrompt('morning', stories, 'global')).toContain('world markets');
+    expect(digestPrompt('us_open', stories)).toContain('Wall Street');
     expect(digestPrompt('morning', stories)).toContain('Sensex rises 312 points');
   });
 });
