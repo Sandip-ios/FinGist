@@ -62,7 +62,8 @@ export function TourOverlay() {
       shownRef.current = target;
       setShown(target);
       tipTop.setValue(nextTip);
-      Animated.timing(appear, { toValue: 1, duration: 260, useNativeDriver: true }).start();
+      // JS-driven like the tip's position: one view cannot mix native and JS animations.
+      Animated.timing(appear, { toValue: 1, duration: 260, useNativeDriver: false }).start();
       return;
     }
     progress.stopAnimation();
