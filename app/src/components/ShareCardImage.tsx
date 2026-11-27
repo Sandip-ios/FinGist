@@ -95,7 +95,7 @@ export const ShareCardImage = forwardRef<HostInstance, Props>(function ShareCard
           <Text style={s.cta}>Read the full story</Text>
           <Text style={s.link} numberOfLines={1}>{shortLink}</Text>
           <Text style={s.small} numberOfLines={2}>
-            AI summary · Not investment advice{story.image ? ` · Photo: ${story.image.photographer} / ${story.image.providerName}` : ''}
+            Summary by FinGist · Source: {story.source} · Not investment advice{story.image ? ` · Photo: ${story.image.photographer} / ${story.image.providerName}` : ''}
           </Text>
         </View>
       </View>

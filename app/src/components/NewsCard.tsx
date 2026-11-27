@@ -171,7 +171,7 @@ function NewsCardImpl({ story, showCategory = true, tourAnchor = false }: Props)
 
       {shareOpen && <ShareSheet story={story} onClose={() => setShareOpen(false)} />}
       <View style={s.below}>
-        <Text style={s.belowText} numberOfLines={1}>AI-generated summary · Not investment advice</Text>
+        <Text style={s.belowText} numberOfLines={1}>Summary by FinGist · Source: {story.source} · Not investment advice</Text>
         {story.image && (
           <Pressable onPress={() => WebBrowser.openBrowserAsync(story.image!.photographerUrl).catch(() => {})} hitSlop={6} accessibilityRole="link">
             <Text style={s.belowText} numberOfLines={1}>Representative image · Photo: {story.image.photographer} / {story.image.providerName}</Text>

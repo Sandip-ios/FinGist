@@ -42,7 +42,7 @@ We use these providers to run FinGist:
 - **Cloudflare** hosts our server and database. Like any web server, it processes the IP address of each request for delivery and security.
 - **Expo** (650 Industries), **Apple** and **Google** deliver push notifications using your push token.
 - **Unsplash** and **Pexels** serve the representative card photos. Your phone loads these images directly from them, so they receive your IP address.
-- **Google Gemini** writes the news summaries. It receives only publicly available news headlines and descriptions, never information about you.
+- **Google (Gemini API)** is the automated text service used to prepare the short summaries. It receives only publicly available news headlines and descriptions, never information about you.
 - **News publishers.** When you tap "Read full story", the publisher's website opens and its own privacy policy applies.
 
 ## 6. How long we keep information

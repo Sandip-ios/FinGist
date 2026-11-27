@@ -59,7 +59,7 @@ ${s.image ? `<img class="photo" src="${esc(img)}" alt="">` : ''}
 ${s.summary ? `<p>${esc(s.summary)}</p>` : ''}
 <a class="btn" href="${esc(safeUrl(s.url))}" rel="noopener">Read full story at ${esc(s.source)} →</a>
 <a class="btn btn2" href="/">Get the FinGist app</a>
-<div class="small">AI-generated summary · Not investment advice${s.image ? ` · Representative image: ${esc(s.image.photographer)} / ${esc(s.image.providerName)}` : ''}</div>
+<div class="small">Summary by FinGist · Source: ${esc(s.source)} · Not investment advice${s.image ? ` · Representative image: ${esc(s.image.photographer)} / ${esc(s.image.providerName)}` : ''}</div>
 </div></article></main>
 <footer><a href="/privacy">Privacy Policy</a><a href="/terms">Terms</a></footer>
 </body></html>`;

@@ -120,7 +120,7 @@ export function MoreSheet({ visible, onClose, onShowTour, onDismiss }: { visible
 
   const shareApp = () => {
     const link = config.websiteUrl || storeUrl();
-    Share.share({ message: `FinGist: Indian and global market news in 60 words, with AI summaries.\n\nGet the app: ${link}` }).catch(() => {});
+    Share.share({ message: `FinGist: Indian and global market news in 60 words, with credit and links to the original publishers.\n\nGet the app: ${link}` }).catch(() => {});
   };
 
   const rateApp = async () => {
@@ -264,9 +264,9 @@ export function MoreSheet({ visible, onClose, onShowTour, onDismiss }: { visible
           <View>
             <Text style={st.section}>About</Text>
             <View style={[st.group, { padding: 14, gap: 10 }]}>
-              <Text style={st.about}><Text style={st.aboutBold}>AI-generated summaries. </Text>Summaries and labels are written automatically from the publisher's headline and description and can contain mistakes. Check the original article before acting on any information.</Text>
+              <Text style={st.about}><Text style={st.aboutBold}>How summaries are made. </Text>FinGist condenses each story from the publisher's headline and description into a short summary. Summaries and labels are created automatically and may miss details, so please read the original article before acting on any information.</Text>
               <Text style={st.about}><Text style={st.aboutBold}>Not investment advice. </Text>FinGist is a news service. Nothing in the app is a recommendation to buy, sell or hold any security. Consult a SEBI-registered adviser before investing.</Text>
-              <Text style={st.about}><Text style={st.aboutBold}>Sources. </Text>{`News belongs to its publishers; FinGist shows headlines, short summaries and links. Sources: ${SOURCES}.`}</Text>
+              <Text style={st.about}><Text style={st.aboutBold}>Credit to publishers. </Text>{`All news belongs to its original publishers. FinGist shows the headline, a short summary, the publisher's name and a link to the full article. Sources: ${SOURCES}.`}</Text>
               <Text style={st.about}><Text style={st.aboutBold}>Photos. </Text>Representative images from Unsplash and Pexels under their free licences; not photos of the actual events.</Text>
             </View>
           </View>

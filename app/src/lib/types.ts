@@ -13,7 +13,7 @@ export interface Story {
   id: string;
   title: string;
   summary: string | null;
-  /** pending = AI summary still being written; unavailable = headline only. */
+  /** pending = summary still being prepared; unavailable = headline only. */
   summaryStatus: 'ready' | 'pending' | 'unavailable';
   source: string;
   url: string;

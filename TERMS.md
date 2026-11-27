@@ -12,9 +12,9 @@ FinGist collects stock market and financial news from public sources (such as ne
 
 **FinGist is a news service only.** Nothing in FinGist is investment, financial, tax or legal advice, or a recommendation to buy, sell or hold any security. Labels such as "sentiment" and "relevance" describe the news story, not the merits of any investment. FinGist is not registered with SEBI as an investment adviser or research analyst. Do your own research and consult a SEBI-registered adviser before making investment decisions. You are solely responsible for your decisions.
 
-## 3. AI-generated summaries
+## 3. How summaries are made
 
-Summaries, categories, company tags, sentiment and relevance labels are generated automatically by artificial intelligence from the publisher's headline and description. They may be incomplete, out of date or wrong. Always read the original article before relying on any information.
+FinGist condenses each story from the publisher's headline and description. Summaries, categories, company tags, sentiment and relevance labels are created automatically by software and may be incomplete, out of date or wrong. Every story credits its publisher and links to the original article; always read it before relying on any information.
 
 ## 4. Third-party content
 
